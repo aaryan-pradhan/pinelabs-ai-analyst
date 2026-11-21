@@ -26,3 +26,15 @@ def test_naming_the_own_category_anywhere_does_not_skip_the_scope(sql, con):
 def test_merchant_manager_subquery_that_could_read_other_categories_is_rejected(sql):
     with pytest.raises(Rejected, match="subquer"):
         validate(sql, GROCERY)
+
+
+@pytest.mark.parametrize("sql", [
+    # The scope lands on the unaliased copy; m carries every category's rows.
+    "SELECT m.category, COUNT(*) AS n FROM transactions JOIN merchants AS m ON m.merchant_id = "
+    "transactions.merchant_id JOIN merchants ON merchants.tier = m.tier GROUP BY m.category",
+    # t2 shares only the bank, so its rows come from every category.
+    f"SELECT COUNT(*) AS n {FROM} JOIN transactions AS t2 ON t2.bank_id = transactions.bank_id",
+])
+def test_merchant_manager_cannot_read_other_categories_through_a_second_copy(sql):
+    with pytest.raises(Rejected):
+        validate(sql, GROCERY)
