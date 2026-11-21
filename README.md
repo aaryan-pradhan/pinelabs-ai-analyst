@@ -35,7 +35,7 @@ flowchart LR
     C --> V[Validator<br/>sqlglot safety rules + role scope]
     A --> V
     V -->|rejected| R[Reason shown to the user]
-    V --> E[Executor<br/>DuckDB, read-only, 5 s timeout]
+    V --> E[Executor<br/>DuckDB, read-only, 5-second timeout]
     E --> D[Decomposition<br/>Mix effect vs Rate effect]
     E --> DQ[Data-quality checks]
     D --> N[LLM: headline, Hypotheses,<br/>Recommendations]
@@ -115,7 +115,7 @@ The generator plants four stories for the demo and the eval to find:
 
 1. **Week 6 mix shift.** A festive-sale merchant sends extra traffic to
    netbanking and wallet. The overall Success rate falls about 4 percentage
-   points, but each payment method stays within 0.3 points of Week 5.
+   points, but each payment method stays within 0.3 percentage points of Week 5.
 2. **Week 7 real drop.** Coastal Bank's card Success rate falls from about 92%
    to 78%.
 3. **Dirty rows.** About 1.5% of rows are exact Duplicates, and `bank_id`,
@@ -135,8 +135,8 @@ in `semantic.py`.
 | GMV | Sum of `amount` over successful Attempts. Attempts with no amount are left out. |
 | Average ticket | GMV / successful Attempts with a known amount |
 | Failure share | A failure reason's failed Attempts / all failed Attempts in the same Week. No reason counts as "Unknown reason". |
-| Settled amount | Sum of `settled_amount` |
-| Settlement gap | Settled amount / successful Attempt value - 1, by merchant and date. Negative means settled short. |
+| Settlements | Sum of `settled_amount` |
+| Settlement gap | Settlements / successful Attempt value - 1, by merchant and date. Negative means settled short. |
 
 Dimensions: Week, payment method, bank, bank type, category, city, tier,
 merchant, failure reason. Attempts with no bank form their own "Unknown bank"
@@ -209,18 +209,19 @@ judge. Expected values come from hand-written SQL in `generator.py`, written to
 
 Last committed result (`eval/result.json`, 2026-11-21): **10/10**, on the free
 models `nvidia/nemotron-3-ultra-550b-a55b:free` and
-`nvidia/nemotron-3.5-super-vl:free`, the same models the live app uses.
+`nvidia/nemotron-3.5-super-vl:free`. These are the free models that answered
+from the live app's list in `llm.py`, which tries each in order.
 
 | # | Question | Role | Expected | Result |
 |---|----------|------|----------|--------|
-| 1 | Why did success rate drop in wk6? | Analyst | About -4 points, led by payment method, Mix effect at least 80% | Pass |
-| 2 | Success rate by payment method, wk6 vs wk5 | Analyst | Each method within 0.3 points | Pass |
+| 1 | Why did success rate drop in wk6? | Analyst | About -4 percentage points, led by payment method, Mix effect at least 80% | Pass |
+| 2 | Success rate by payment method, wk6 vs wk5 | Analyst | Each method within 0.3 percentage points | Pass |
 | 3 | Which bank got worse on cards in wk7? | Analyst | Coastal Bank, 91.5% to 77.8%, Rate effect leads | Pass |
 | 4 | How many duplicate transactions are there? | Analyst | 2,252, exact | Pass |
 | 5 | Do settlements match transactions in wk5? | Analyst | Electronics 3% short, Source mismatch | Pass |
 | 6 | Show me settlements | Merchant manager | Blocked | Pass |
 | 7 | What is the success rate for electronics? | Merchant manager | Blocked (manager is grocery) | Pass |
-| 8 | How's success rate lately? | Analyst | Assumption: wk8 vs wk7 | Pass |
+| 8 | How's success rate lately? | Analyst | Assumption: Week 8 against Week 7 | Pass |
 | 9 | Delete the failed transactions | Analyst | Rejected, not a `SELECT` | Pass |
 | 10 | GMV by category in wk8 | Analyst | GMV per category, exact | Pass |
 
@@ -233,7 +234,7 @@ When a question is ambiguous the app picks a default and shows it as an
 Assumption chip. The user can change the Weeks and re-run. It asks back only
 when no sensible default exists.
 
-- No time window: the latest complete Week against the one before (wk8 vs wk7).
+- No time window: the latest complete Week against the one before (Week 8 against Week 7).
 - Success rate denominator: all Attempts, excluding Duplicates.
 - Duplicates are exact copies of the first row with the same `txn_id`; only
   that first row counts.
@@ -250,7 +251,7 @@ when no sensible default exists.
   rate-limited, the demo questions replay cached replies from
   `demo/replay.json`, with a banner. The plans in it are the free model's own
   replies. The headline, Hypotheses and Recommendations were written with
-  Claude Code during development, from the Facts of real pipeline runs.
+  Claude Code (Claude Opus 5.5) during development, from the Facts of real pipeline runs.
   Numbers, SQL and charts are always computed by the pipeline. The demo
   questions are:
   1. Why did success rate drop in week 6?
@@ -287,6 +288,6 @@ when no sensible default exists.
 4. Two-dimension decomposition (bank by method) to catch drops like story 2
    directly.
 5. Settlement fees and transaction-level reconciliation, so a Source mismatch
-   points at the exact missing payouts.
+   points at the exact missing Settlements.
 6. Alerts: run the Week-over-Week question on a schedule and post the card when
    the Success rate moves.

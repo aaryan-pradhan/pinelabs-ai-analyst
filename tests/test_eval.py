@@ -72,4 +72,6 @@ def test_readme_quotes_the_committed_eval_result():
     assert f"**{result['passed']}/{result['total']}**" in readme
     assert result["date"] in readme
     assert all(f"`{m}`" in readme for m in result["models"])
-    assert all(r["question"] in readme for r in result["results"])
+    rows = {line.split(" | ")[1]: line.split(" | ")[-1] for line in readme.splitlines()
+            if line.startswith("| ") and line.count(" | ") == 4}
+    assert {r["question"]: ("Pass |" if r["passed"] else "Fail |") for r in result["results"]}.items() <= rows.items()
