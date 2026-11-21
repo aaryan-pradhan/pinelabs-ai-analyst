@@ -23,6 +23,19 @@ def test_story_a_wk6_overall_drop_with_every_method_flat(con):
         assert abs(change) <= 0.003, method
 
 
+def test_story_b_one_bank_card_rate_falls_in_wk7(con):
+    card = con.execute(f"""
+        SELECT banks.name, {RATE} FILTER (WHERE {WEEK} = 6), {RATE} FILTER (WHERE {WEEK} = 7)
+        FROM transactions JOIN banks USING (bank_id)
+        WHERE payment_method = 'card' GROUP BY 1
+    """).fetchall()
+    fell = [(bank, wk6, wk7) for bank, wk6, wk7 in card if wk7 - wk6 < -0.05]
+    assert len(fell) == 1
+    _, wk6, wk7 = fell[0]
+    assert 0.90 < wk6 < 0.94
+    assert 0.76 < wk7 < 0.80
+
+
 def test_story_c_duplicates_and_nulls(con):
     rows, ids, distinct_rows = con.execute(
         "SELECT COUNT(*), COUNT(DISTINCT txn_id), (SELECT COUNT(*) FROM (SELECT DISTINCT * FROM transactions))"

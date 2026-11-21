@@ -3,7 +3,8 @@
 8 Weeks, Mon 28 Sep - Sun 22 Nov 2026. Planted story (a): in wk6 a
 festive-sale merchant pushes extra traffic to netbanking and wallet, so the
 overall Success rate falls while every payment method stays flat. Planted
-story (c): ~1.5% exact-copy Duplicates and nulls in bank_id, amount and
+story (b): in wk7 Coastal Bank's card Success rate falls from ~92% to ~78%.
+Planted story (c): ~1.5% exact-copy Duplicates and nulls in bank_id, amount and
 failure_reason.
 """
 from pathlib import Path
@@ -26,6 +27,7 @@ METHODS = {
     "wallet": (0.04, 0.80),
 }
 FESTIVE_METHODS = {"netbanking": 0.55, "wallet": 0.45}
+DROP_BANK, DROP_RATE = 3, 0.78  # story (b): Coastal Bank's card rate in wk7
 
 CATEGORIES = ["grocery", "electronics", "fashion", "travel", "food_delivery", "fuel"]
 CITIES = ["Mumbai", "Delhi", "Bengaluru", "Chennai", "Hyderabad",
@@ -83,11 +85,13 @@ def build(path, seed=42):
         "amount": np.round(rng.lognormal(7, 1, n), 2),
     })
 
-    # Exact successes per (week, method) keep each method's rate flat week to week.
+    # Exact successes per (week, method) keep each method's rate flat week to week,
+    # except Coastal Bank's cards in wk7 (story b).
     week = day // 7
+    drop = (week == 6) & (method == "card") & (tx["bank_id"] == DROP_BANK).to_numpy()
     success = np.zeros(n, dtype=bool)
-    for (w, m), idx in tx.groupby([week, method]).indices.items():
-        k = round(len(idx) * METHODS[m][1])
+    for (w, m, dropped), idx in tx.groupby([week, method, drop]).indices.items():
+        k = round(len(idx) * (DROP_RATE if dropped else METHODS[m][1]))
         success[rng.choice(idx, k, replace=False)] = True
     tx["status"] = np.where(success, "success", "failed")
     tx["failure_reason"] = np.where(success, None, rng.choice(FAILURE_REASONS, n))
