@@ -190,3 +190,10 @@ def test_narration_that_is_not_json_is_refused_with_the_executed_sql(db_path):
         ask("Why did success rate drop in week 6?", "analyst", lambda prompt, check: next(replies), db_path)
     assert all("IN (5, 6)" in s for s in err.value.sql)
 
+
+def test_filter_that_matches_no_attempts_is_refused_with_its_sql(db_path):
+    plan = {"metric": "success_rate", "weeks": [6, 7], "filters": {"payment_method": "Cards' OR '1'='1"}}
+
+    with pytest.raises(ModelUnavailable, match="No Attempts match") as err:
+        ask("Which bank got worse on cards in week 7?", "analyst", fake_llm(plan), db_path)
+    assert all("Cards'' OR ''1''=''1'" in s for s in err.value.sql)

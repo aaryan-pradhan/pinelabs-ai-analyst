@@ -129,6 +129,10 @@ def ask(question, role, llm, db_path=DB_PATH):
 
     (overall_sql, overall_tables), *split_sql = planned_sql(plan)
     overall = run(overall_sql, db_path)
+    if set(overall["week"]) != set(weeks):  # e.g. a filter value the data does not have
+        e = ModelUnavailable(f"No Attempts match {', '.join(cited)} in {window}; try rephrasing.")
+        e.sql = [overall_sql]
+        raise e
     splits = []
     for dim, (sql, tables) in zip(leads(plan), split_sql):
         seg = run(sql, db_path)
