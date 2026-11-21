@@ -27,6 +27,21 @@ FIXES = {"Coaster bank": "Coastal Bank", "mixed effect": "Mix effect",
 
 
 MANIM = {2: "mix-vs-rate", 9: "how-it-works"}  # chapter -> its animation in videos/<slug>/
+END = 6.0  # seconds of the closing card with the live link, after the last chapter
+
+
+def end_card():
+    """end.html as one still frame: the deployed app's link."""
+    from playwright.sync_api import sync_playwright
+    png = OUT / "end.jpg"  # jpeg like every other frame: a segment is read as one image type
+    with sync_playwright() as pw:
+        b = pw.chromium.launch()
+        page = b.new_page(viewport={"width": 1920, "height": 1080})
+        page.goto((HERE / "end.html").as_uri(), wait_until="networkidle")
+        page.evaluate("document.fonts.ready")
+        page.screenshot(path=str(png), type="jpeg", quality=95)
+        b.close()
+    return png
 
 
 def manim_frames(c):
@@ -56,8 +71,11 @@ def source(log):
                 report.append(f"{s['name']} {action} at {pt:.2f}s ran {at - pt:+.2f}s")
     anim = {c: manim_frames(c) for c in cues.MANIM}
     split = log["split"]
+    end, last = end_card(), tl[-1]["start"] + tl[-1]["dur"]
 
     def at(g):
+        if g >= last:
+            return end
         ch = next(ch for ch in reversed(tl) if g >= ch["start"]) if g >= 0 else tl[0]
         local = g - ch["start"]
         if ch["c"] in cues.MANIM:
@@ -116,7 +134,10 @@ def audio(tl):
 def captions(tl):
     out, n = [], 0
     stamp = lambda s: f"{int(s // 3600):02d}:{int(s % 3600 // 60):02d}:{int(s % 60):02d},{int(s * 1000 % 1000):03d}"
+    lines = []
     for ch in tl:
+        if ch["c"] in cues.MANIM:  # an animation already shows its words
+            continue
         ws = json.loads((HERE / "words" / f"ch{ch['c']}.json").read_text())
         chunk = []
         for i, w in enumerate(ws):
@@ -130,10 +151,59 @@ def captions(tl):
                 g1 = ch["start"] + ch["pre"] + chunk[-1][2] - ch["trim"][0]
                 n += 1
                 out.append(f"{n}\n{stamp(g0)} --> {stamp(g1)}\n{text}\n")
+                lines.append((g0, g1, text, [ch["start"] + ch["pre"] + w[1] - ch["trim"][0] for w in chunk]))
                 chunk = []
     srt = OUT / "first_cut.srt"
     srt.write_text("\n".join(out))
-    return srt
+    return srt, lines
+
+
+CAPTION = """<!doctype html><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400&display=block" rel="stylesheet">
+<style>html,body{margin:0;width:1920px;height:1080px;background:transparent}
+#c{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);max-width:1500px;text-align:center;
+font:400 27px/1.45 "Source Code Pro",monospace;color:#fdfcf7;background:rgba(29,58,51,.78);padding:6px 18px;
+border-radius:6px}</style><div id="c"></div>"""
+
+
+def caption_track(lines, total):
+    """Burned-in captions: one transparent frame per line, timed by a concat list, laid over the picture."""
+    from playwright.sync_api import sync_playwright
+    d = OUT / "captions"
+    d.mkdir()
+    with sync_playwright() as pw:
+        b = pw.chromium.launch()
+        page = b.new_page(viewport={"width": 1920, "height": 1080})
+        page.set_content(CAPTION, wait_until="networkidle")
+        page.evaluate("document.fonts.ready")
+        page.evaluate("document.getElementById('c').style.display='none'")
+        page.screenshot(path=str(d / "blank.png"), omit_background=True)
+        page.evaluate("document.getElementById('c').style.display=''")
+        # Words come in as they are spoken: the whole line is laid out (so its box never jumps), the words not yet
+        # said are hidden. A fix may change the word count, so the shown share follows the spoken share.
+        show = """([s, m]) => { const c = document.getElementById('c'); c.innerHTML = '';
+            s.split(' ').forEach((w, i) => { const e = document.createElement('span');
+                e.textContent = w + ' '; e.style.visibility = i < m ? '' : 'hidden'; c.appendChild(e); }); }"""
+        for k, (_, _, text, starts) in enumerate(lines):
+            n = len(text.split(" "))
+            for j in range(len(starts)):
+                page.evaluate(show, [text, round(n * (j + 1) / len(starts))])
+                page.screenshot(path=str(d / f"{k:04d}_{j:02d}.png"), omit_background=True)
+        b.close()
+    out, now = [], 0.0
+    for k, (g0, g1, _, starts) in enumerate(lines):
+        nxt = lines[k + 1][0] if k + 1 < len(lines) else total
+        g1 = nxt if nxt - g1 < 0.4 else g1  # bridge short gaps, so captions don't blink
+        if g0 > now:
+            out += [f"file '{d / 'blank.png'}'", f"duration {g0 - now:.3f}"]
+        for j, s in enumerate(starts):
+            e = starts[j + 1] if j + 1 < len(starts) else g1
+            out += [f"file '{d / f'{k:04d}_{j:02d}.png'}'", f"duration {max(e - s, 0.001):.3f}"]
+        now = g1
+    out += [f"file '{d / 'blank.png'}'", f"duration {max(total - now, 0.1):.3f}", f"file '{d / 'blank.png'}'"]
+    lst = d / "list.txt"
+    lst.write_text("\n".join(out) + "\n")
+    return lst
 
 
 def main():
@@ -142,9 +212,9 @@ def main():
     log = json.loads((REC / "log.json").read_text())
     tl = cues.timeline()
     at, report = source(log)
-    total = sum(ch["dur"] for ch in tl)
+    total = sum(ch["dur"] for ch in tl) + END
     # Hard joins inside the app recording; dissolves where the picture changes source.
-    edges = [log["split"]] + [tl[c]["start"] for c in sorted(cues.MANIM)] + [tl[c]["start"] + tl[c]["dur"] for c in sorted(cues.MANIM) if c < 9]
+    edges = [log["split"]] + [tl[c]["start"] for c in sorted(cues.MANIM)] + [tl[c]["start"] + tl[c]["dur"] for c in sorted(cues.MANIM)]
     edges = sorted(edges)
     bounds = [0.0] + edges + [total]
     parts = []
@@ -156,7 +226,8 @@ def main():
         for i in range(round((b - a) * FPS)):
             (d / f"{i:06d}.jpg").symlink_to(at(a + i / FPS).resolve())
         parts.append((d, b - a))
-    wav, srt = audio(tl), captions(tl)
+    wav, (srt, lines) = audio(tl), captions(tl)
+    caps = caption_track(lines, total)
     args, chain, acc, last = [], [], 0.0, "0:v"
     for k, (d, length) in enumerate(parts):
         args += ["-framerate", str(FPS), "-i", str(d / "%06d.jpg")]
@@ -164,11 +235,13 @@ def main():
             acc += parts[k - 1][1] - (XF if k > 1 else 0)
             chain.append(f"[{last}][{k}:v]xfade=transition=fade:duration={XF}:offset={acc - XF:.3f}[v{k}]")
             last = f"v{k}"
+    n = len(parts)
+    chain.append(f"[{n + 1}:v]fps={FPS},format=rgba[cap];[{last}][cap]overlay=0:0:eof_action=repeat[vc]")
     mp4 = OUT / "first_cut.mp4"
-    subprocess.run(["ffmpeg", "-v", "error", "-y", *args, "-i", str(wav), "-i", str(srt),
-                    "-filter_complex", ";".join(chain), "-map", f"[{last}]", "-map", f"{len(parts)}:a",
-                    "-map", f"{len(parts) + 1}:s", "-c:v", "libx264", "-crf", "18", "-preset", "medium",
-                    "-pix_fmt", "yuv420p", "-r", str(FPS), "-c:a", "aac", "-b:a", "192k", "-c:s", "mov_text",
+    subprocess.run(["ffmpeg", "-v", "error", "-y", *args, "-i", str(wav), "-f", "concat", "-safe", "0", "-i", str(caps),
+                    "-filter_complex", ";".join(chain), "-map", "[vc]", "-map", f"{n}:a",
+                    "-c:v", "libx264", "-crf", "18", "-preset", "medium",
+                    "-pix_fmt", "yuv420p", "-r", str(FPS), "-c:a", "aac", "-b:a", "192k",
                     "-t", f"{total:.3f}", str(mp4)], check=True)
     # The cue list in video time, for giving notes against the cut.
     lines = []
