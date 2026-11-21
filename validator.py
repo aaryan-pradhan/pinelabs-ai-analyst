@@ -60,13 +60,16 @@ def scoped(tree, tables, role):
     # whose one subquery is the unfiltered Attempts source. Scope subqueries if plans ever nest.
     named = {eq.expression.name for eq in tree.find_all(exp.EQ)
              if isinstance(eq.this, exp.Column) and eq.this.name == "category"}
-    others = sorted(named - {role.category})
+    others = sorted(n for n in named if n.lower() != role.category.lower())
     if others:
         raise Rejected(f"A {role.name} for {role.category} cannot see {', '.join(others)}; "
                        f"ask about {role.category} only.")
-    if named:
+    # Always ANDed at the top: a match elsewhere (an OR, a CASE) does not scope the rows.
+    scope = exp.column("category", "merchants").eq(exp.Literal.string(role.category))
+    where = tree.args.get("where")
+    if where and scope in (where.this.flatten() if isinstance(where.this, exp.And) else [where.this]):
         return tree
     if "merchants" not in tables:
         key = JOINS["merchants"]
         tree = tree.join("merchants", on=f"merchants.{key} = transactions.{key}", join_type="left")
-    return tree.where(exp.column("category", "merchants").eq(exp.Literal.string(role.category)))
+    return tree.where(scope)
