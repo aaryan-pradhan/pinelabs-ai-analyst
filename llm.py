@@ -32,19 +32,34 @@ def post(model, prompt, key):
     return text
 
 
-def complete(prompt, post=post, cache_dir=CACHE_DIR):
+def accept_any(text):
+    pass
+
+
+def complete(prompt, check=accept_any, post=post, cache_dir=CACHE_DIR):
+    """The first free model's reply that passes `check` (raises ValueError if unusable)."""
+    # ponytail: cache keyed on prompt only, no expiry, also live on deploy; fine while the
+    # data is a fixed seed. Add expiry if the data starts changing.
     saved = Path(cache_dir) / f"{hashlib.sha256(prompt.encode()).hexdigest()}.txt"
     if saved.exists():
         return saved.read_text()
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
         raise ModelUnavailable("no OpenRouter key set: add OPENROUTER_API_KEY to Streamlit secrets")
+    unusable = False
     for model in MODELS:
         try:
             text = post(model, prompt, key)
         except (OSError, KeyError, IndexError, ValueError):  # HTTP 429/5xx, timeout, bad body
             continue
+        try:
+            check(text)
+        except ValueError:  # answered, but not something we can use; never saved
+            unusable = True
+            continue
         saved.parent.mkdir(parents=True, exist_ok=True)
         saved.write_text(text)
         return text
+    if unusable:
+        raise ModelUnavailable("the free model returned an unusable reply, try rephrasing")
     raise ModelUnavailable("free model limit reached, try again in a minute")

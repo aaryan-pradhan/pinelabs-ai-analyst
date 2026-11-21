@@ -1,7 +1,7 @@
 """The analyst seam: (question, role, llm) -> Answer. No Streamlit in here.
 
-`llm` is any callable taking a prompt string and returning JSON text: first the
-plan, then the narration (headline, Hypotheses, Recommendations).
+`llm(prompt, check)` returns the model's text, preferring a reply that passes
+`check`: first the plan, then the narration (headline, Hypotheses, Recommendations).
 """
 import json
 from dataclasses import dataclass
@@ -58,25 +58,32 @@ def usable(plan):
             and all(type(w) is int and w in WEEKS for w in weeks))
 
 
-def narration_prompt(question, finding, facts):
+def narration_prompt(question, computed_headline, facts):
     lines = "\n".join(f"- {f.label}: {f.value * 100:.2f}{f.unit}" for f in facts)
     return (
-        "You are a payments analyst. Using only the computed finding and facts below, reply with JSON only:\n"
+        "You are a payments analyst. Using only the computed headline and Facts below, reply with JSON only:\n"
         '{"headline": <one sentence>, "hypotheses": [<possible cause>], "recommendations": [<next step>]}\n'
-        f"Question: {question}\nFinding: {finding}\nFacts:\n{lines}"
+        f"Question: {question}\nComputed headline: {computed_headline}\nFacts:\n{lines}"
     )
 
 
-def reply(llm, prompt, fits):
-    """The model's JSON reply, or ModelUnavailable if it is not JSON that `fits`."""
-    text = llm(prompt)
-    try:  # free models often wrap JSON in prose or code fences
-        data = json.loads(text[text.find("{"):text.rfind("}") + 1])
-    except ValueError:
-        data = None
+def parse(text, fits):
+    """The JSON object in `text` if it `fits`, else ValueError."""
+    # ponytail: outermost {...} span, which handles prose and code fences; breaks if the
+    # model adds a second JSON object. Use a JSON-mode request if that shows up.
+    data = json.loads(text[text.find("{"):text.rfind("}") + 1])
     if not isinstance(data, dict) or not fits(data):
-        raise ModelUnavailable(f"the free model returned an unusable reply, try rephrasing: {text[:200]}")
+        raise ValueError(f"unusable reply: {text[:200]}")
     return data
+
+
+def reply(llm, prompt, fits):
+    """The model's JSON reply; `llm` gets the check so it can try another model."""
+    text = llm(prompt, lambda t: parse(t, fits))
+    try:
+        return parse(text, fits)
+    except ValueError:
+        raise ModelUnavailable(f"the free model returned an unusable reply, try rephrasing: {text[:200]}")
 
 
 def narrated(story):
