@@ -1,0 +1,25 @@
+{
+  "wk6_total_change": -0.0399836601,
+  "wk6_method_change": {
+    "card": 2.1252e-06,
+    "netbanking": -0.0007695379,
+    "upi": -0.0001212188,
+    "wallet": 0.0008872561
+  },
+  "drop_bank": "Coastal Bank",
+  "drop_bank_card_rate": [
+    0.9153605016,
+    0.7783094099
+  ],
+  "duplicates": 2252,
+  "gap_category": "electronics",
+  "gap": -0.03,
+  "wk8_gmv_by_category": {
+    "electronics": 3775274.21,
+    "fashion": 6211557.52,
+    "food_delivery": 5624197.6,
+    "fuel": 2958179.58,
+    "grocery": 4235621.62,
+    "travel": 5819885.48
+  }
+}

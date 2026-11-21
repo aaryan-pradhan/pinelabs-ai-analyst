@@ -8,6 +8,7 @@ Planted story (c): ~1.5% exact-copy Duplicates and nulls in bank_id, amount and
 failure_reason. Planted story (d): in wk5 electronics merchants' Settlements are
 3% below their successful Attempt value; everywhere else they match exactly.
 """
+import json
 from pathlib import Path
 
 import duckdb
@@ -135,3 +136,44 @@ def ensure(path):
     """Build the database from the seed if it is missing."""
     if not Path(path).exists():
         build(path)
+
+
+EXPECTED_PATH = Path(__file__).parent / "eval" / "expected.json"
+
+
+def expected(path):
+    """The eval's expected answers, from hand-written SQL over the generated data,
+    independent of the semantic layer and compiler the analyst uses."""
+    con = duckdb.connect(str(path), read_only=True)
+    wk = f"date_diff('day', DATE '{START.date()}', CAST(ts AS DATE)) // 7 + 1"
+    tx = f"(SELECT DISTINCT ON (txn_id) *, {wk} AS wk FROM transactions) t"  # Duplicates removed
+    ok = "AVG(CASE WHEN status = 'success' THEN 1.0 ELSE 0.0 END)"
+
+    def rows(sql):
+        return con.execute(sql).fetchall()
+
+    (wk5, wk6), = rows(f"SELECT {ok} FILTER (WHERE wk = 5), {ok} FILTER (WHERE wk = 6) FROM {tx}")
+    methods = rows(f"SELECT payment_method, {ok} FILTER (WHERE wk = 6) - {ok} FILTER (WHERE wk = 5)"
+                   f" FROM {tx} GROUP BY 1 ORDER BY 1")
+    (bank, card6, card7), = rows(
+        f"SELECT b.name, {ok} FILTER (WHERE wk = 6), {ok} FILTER (WHERE wk = 7) FROM {tx}"
+        f" JOIN banks b USING (bank_id) WHERE payment_method = 'card' AND b.bank_id = {DROP_BANK} GROUP BY 1")
+    (dupes,), = rows("SELECT COUNT(*) - COUNT(DISTINCT txn_id) FROM transactions")
+    (gap,), = rows(
+        f"SELECT (SELECT SUM(settled_amount) FROM settlements s JOIN merchants m USING (merchant_id)"
+        f"  WHERE m.category = '{SHORT_CATEGORY}' AND date_diff('day', DATE '{START.date()}', s.date) // 7 + 1 = {SHORT_WEEK})"
+        f" / SUM(amount) - 1 FROM {tx} JOIN merchants m USING (merchant_id)"
+        f" WHERE status = 'success' AND m.category = '{SHORT_CATEGORY}' AND wk = {SHORT_WEEK}")
+    gmv = rows(f"SELECT m.category, ROUND(SUM(amount), 2) FROM {tx} JOIN merchants m USING (merchant_id)"
+               " WHERE status = 'success' AND wk = 8 GROUP BY 1 ORDER BY 1")
+    con.close()
+    r = lambda x: round(x, 10)  # parallel float sums differ in the last digits run to run
+    return {"wk6_total_change": r(wk6 - wk5), "wk6_method_change": {m: r(c) for m, c in methods},
+            "drop_bank": bank, "drop_bank_card_rate": [r(card6), r(card7)], "duplicates": dupes,
+            "gap_category": SHORT_CATEGORY, "gap": r(gap), "wk8_gmv_by_category": dict(gmv)}
+
+
+if __name__ == "__main__":  # rebuild the database and the eval's expected answers
+    build(DB_PATH)
+    EXPECTED_PATH.parent.mkdir(exist_ok=True)
+    EXPECTED_PATH.write_text(json.dumps(expected(DB_PATH), indent=2) + "\n")
