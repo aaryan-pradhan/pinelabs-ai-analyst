@@ -22,7 +22,6 @@ st.html("""<style>
 header[data-testid="stHeader"] {background: transparent}
 .lbl {font-family: 'IBM Plex Mono', monospace; font-size: .72rem; letter-spacing: .08em;
       text-transform: uppercase; color: #8b949e; margin: 0 0 .35rem}
-.lbl b {color: #ffc400; font-weight: 500}
 .lead {color: #8b949e; margin: -.4rem 0 1.4rem; max-width: 60ch}
 .headline {font-size: 1.65rem; line-height: 1.3; font-weight: 500; letter-spacing: -.01em;
            color: #e6edf3; margin: .1rem 0 .2rem; max-width: 46ch}
@@ -37,18 +36,17 @@ header[data-testid="stHeader"] {background: transparent}
 [data-testid="stMetricLabel"] p {font-family: 'IBM Plex Mono', monospace; font-size: .75rem; color: #8b949e}
 [data-testid="stPopover"] button p, [data-testid="stExpander"] summary p {font-family: 'IBM Plex Mono', monospace;
       font-size: .78rem}
-[data-testid="stCaptionContainer"] {font-family: 'IBM Plex Mono', monospace; font-size: .75rem}
-</style>""")
+</style>""")  # ponytail: data-testid selectors are Streamlit internals; recheck on an upgrade
 
 
 def label(text, tag=""):
     st.html(f'<p class="lbl">{text}{f"<span class=tag>{tag}</span>" if tag else ""}</p>')
 
 
-def styled(fig, title, height=300):
+def styled(fig, title):
     fig.update_layout(
         title={"text": title, "font": {"family": MONO, "size": 12, "color": INK}, "x": 0, "y": .97},
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=height,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=300,
         font={"family": MONO, "size": 11, "color": INK}, margin={"l": 0, "r": 0, "t": 36, "b": 0},
         bargap=.35, bargroupgap=.08, hoverlabel={"font": {"family": MONO}}, showlegend=False)
     fig.update_yaxes(gridcolor=GRID, zeroline=False, showticklabels=False, showline=False)  # bars carry labels
@@ -85,13 +83,13 @@ with st.sidebar:
     st.caption("A Merchant manager sees only their category; the SQL validator enforces it.")
     st.divider()
     label("Quality check")
-    run_eval = st.button("Run eval", use_container_width=True)
+    run_eval = st.button("Run eval", width="stretch")
     st.caption("Grades 10 known-answer questions on the free model.")
 
-label("Pine Labs · Payments · wk1 – wk8")
+label(f"Pine Labs · Payments · wk{WEEKS[0]} – wk{WEEKS[-1]}")
 st.title("AI Business Analyst")
 st.html('<p class="lead">Ask about Success rate, GMV or Settlements. Every number below comes from SQL '
-        "that ran on 8 weeks of payment Attempts; anything a model wrote is labelled.</p>")
+        f"that ran on {len(WEEKS)} Weeks of payment Attempts; anything a model wrote is labelled.</p>")
 
 if run_eval:  # 10 known-answer questions (D26)
     try:
@@ -151,9 +149,8 @@ if question:
             with chips.popover(f"Scope: {answer.assumptions['scope']}"):
                 st.caption(f"A {role.name} sees only their category.")
         if "denominator" in answer.assumptions:
-            with chips.popover("Denominator: all Attempts excl. Duplicates"):
-                st.caption(f"{answer.assumptions['denominator']}: the only Success rate denominator "
-                           "the semantic layer defines (D19).")
+            with chips.popover(f"Denominator: {answer.assumptions['denominator']}"):
+                st.caption("The only Success rate denominator the semantic layer defines (D19).")
 
     if answer.result:  # an ad-hoc question: the rows its model-written SQL returned
         with st.container(border=True):
@@ -171,11 +168,11 @@ if question:
                         f'{weeks[0]}<span class="sw" style="background:{ACCENT}"></span>{weeks[1]}</p>')
                 left, right = st.columns(2, gap="large")
                 with left:
-                    plot(week_bars(d["segments"], "share", weeks, f"Traffic share by {by} (%)"))
+                    plot(week_bars(d["segments"], "share", weeks, f"Share of Attempts by {by} (%)"))
                 with right:
                     plot(week_bars(d["segments"], "rate", weeks, f"Success rate by {by} (%)"))
-                st.caption(f"Total {d['total'] * 100:+.2f}pp = mix {d['mix'] * 100:+.2f}pp (traffic moving "
-                           f"between {by}s) + rate {d['rate'] * 100:+.2f}pp (rates changing within them).")
+                st.caption(f"Total {d['total'] * 100:+.2f}pp = Mix effect {d['mix'] * 100:+.2f}pp (Attempts moving "
+                           f"between {by}s) + Rate effect {d['rate'] * 100:+.2f}pp (rates changing within them).")
             else:
                 gmv = "gmv" in answer.chart[0]
                 key = "gmv" if gmv else "gap"
