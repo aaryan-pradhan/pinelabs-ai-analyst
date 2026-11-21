@@ -1,5 +1,6 @@
 """Seam 1: the analyst, driven with a fake LLM that returns a fixed plan."""
 import json
+import re
 import shutil
 
 import duckdb
@@ -8,7 +9,8 @@ import pytest
 from analyst import ask
 from llm import ModelUnavailable
 
-WK6_PLAN = {"metric": "success_rate", "dimensions": ["payment_method"], "weeks": [5, 6]}
+WK6_PLAN = {"metric": "success_rate", "weeks": [5, 6]}
+WK7_CARD_PLAN = {"metric": "success_rate", "weeks": [6, 7], "filters": {"payment_method": "card"}}
 
 
 NARRATION = {"headline": "h", "hypotheses": [], "recommendations": []}
@@ -43,6 +45,25 @@ def test_wk6_drop_is_a_mix_shift(db_path):
         assert "LIMIT 10000" in fact.sql
         assert fact.tables == ["transactions"]
         assert fact.window == "wk5 vs wk6"
+
+
+def test_wk7_card_drop_names_the_bank_that_got_worse(db_path):
+    prompts = []
+    answer = ask("Which bank got worse on cards in week 7?", "analyst", fake_llm(WK7_CARD_PLAN, prompts), db_path)
+
+    d = answer.decomposition
+    assert d["dimension"] == "bank"
+    assert d["rate"] / d["total"] >= 0.8
+    coastal = next(s for s in d["segments"] if s["segment"] == "Coastal Bank")  # planted in story (b)
+    assert 0.90 < coastal["rate_before"] < 0.94
+    assert 0.76 < coastal["rate_after"] < 0.80
+    computed = prompts[1].split("Computed headline: ")[1].split("\n")[0]
+    assert "rate change within banks" in computed
+    assert re.search(r"Coastal Bank went from 9[12]\.\d% to 7[78]\.\d%", computed)
+    assert "Coastal Bank" in {row["segment"] for row in answer.chart}
+    for fact in answer.facts:
+        assert fact.filters == ["payment_method = card"]
+        assert "payment_method = 'card'" in fact.sql
 
 
 def test_model_narrates_but_facts_come_only_from_executed_sql(db_path, con):
@@ -84,8 +105,7 @@ def test_duplicates_are_counted_exactly_and_excluded(db_path, con):
 
 
 def test_unknown_bank_segment_keeps_totals_and_null_caveat_fires(db_path, con):
-    plan = {"metric": "success_rate", "dimensions": ["bank"], "weeks": [5, 6]}
-    answer = ask("Did any bank get worse in week 6?", "analyst", fake_llm(plan), db_path)
+    answer = ask("Which bank got worse on cards in week 7?", "analyst", fake_llm(WK7_CARD_PLAN), db_path)
 
     assert "Unknown bank" in {row["segment"] for row in answer.chart}
     overall = con.execute(answer.facts[0].sql).df().set_index("week")["attempts"]
@@ -172,3 +192,11 @@ def test_narration_that_is_not_json_is_refused_with_the_executed_sql(db_path):
     with pytest.raises(ModelUnavailable, match="unusable") as err:
         ask("Why did success rate drop in week 6?", "analyst", lambda prompt, check: next(replies), db_path)
     assert all("IN (5, 6)" in s for s in err.value.sql)
+
+
+def test_filter_that_matches_no_attempts_is_refused_with_its_sql(db_path):
+    plan = {"metric": "success_rate", "weeks": [6, 7], "filters": {"payment_method": "Cards' OR '1'='1"}}
+
+    with pytest.raises(ModelUnavailable, match="No Attempts match") as err:
+        ask("Which bank got worse on cards in week 7?", "analyst", fake_llm(plan), db_path)
+    assert all("Cards'' OR ''1''=''1'" in s for s in err.value.sql)

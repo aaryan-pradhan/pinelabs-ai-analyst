@@ -36,6 +36,11 @@ DIMENSIONS = {
     "week": WEEK,
     "payment_method": "payment_method",
     "bank": "COALESCE(banks.name, 'Unknown bank')",  # null bank_id is its own Segment
+    "bank_type": "COALESCE(banks.type, 'Unknown bank type')",
+    "category": "merchants.category",
+    "city": "merchants.city",
+    "tier": "merchants.tier",
+    "merchant": "merchants.name",
     # Failed Attempts only; successful ones group under NULL.
     "failure_reason": "CASE WHEN status = 'failed' THEN COALESCE(failure_reason, 'Unknown reason') END",
 }
