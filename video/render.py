@@ -27,7 +27,7 @@ FIXES = {"Coaster bank": "Coastal Bank", "mixed effect": "Mix effect",
 
 
 MANIM = {2: "mix-vs-rate", 9: "how-it-works"}  # chapter -> its animation in videos/<slug>/
-END = 6.0  # seconds of the closing card with the live link, after the last chapter
+END = 8.0  # seconds of the closing card with the live link and the note pointer, after the last chapter
 
 
 def end_card():
