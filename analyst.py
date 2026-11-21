@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from compiler import compile_sql
 from decomposition import decompose
+import dq
 from executor import run
 from generator import DB_PATH
 from llm import ModelUnavailable
@@ -34,6 +35,7 @@ class Answer:
     chart: list
     hypotheses: list  # model narration, not evidence
     recommendations: list  # model narration, not evidence
+    dq: dict  # data-quality numbers, caveats and confidence
 
 
 SPLITS = [d for d in DIMENSIONS if d != "week"]  # weeks are chosen separately
@@ -132,7 +134,7 @@ def ask(question, role, llm, db_path=DB_PATH):
         raise
     return Answer(story["headline"], facts, d,
                   [{k: s[k] for k in ("segment", "mix", "rate")} for s in d["segments"]],
-                  story["hypotheses"], story["recommendations"])
+                  story["hypotheses"], story["recommendations"], dq.check(db_path, weeks))
 
 
 def headline(d, base, current):

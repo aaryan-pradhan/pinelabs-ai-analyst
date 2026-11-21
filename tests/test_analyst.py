@@ -67,6 +67,20 @@ def test_model_narrates_but_facts_come_only_from_executed_sql(db_path, con):
             assert fact.value in (rate[6] - rate[5]).to_numpy()
 
 
+WEEK = "CAST(FLOOR(date_diff('day', DATE '2026-09-28', CAST(ts AS DATE)) / 7) AS INTEGER) + 1"
+
+
+def test_duplicates_are_counted_exactly_and_excluded(db_path, con):
+    answer = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), db_path)
+
+    rows, attempts = con.execute(
+        f"SELECT COUNT(*), COUNT(DISTINCT txn_id) FROM transactions WHERE {WEEK} IN (5, 6)").fetchone()
+    assert answer.dq["duplicates"] == rows - attempts > 0
+    assert any(f"{rows - attempts:,} Duplicates" in line for line in answer.dq["caveats"])
+    overall = con.execute(answer.facts[0].sql).df()
+    assert overall["attempts"].sum() == attempts
+
+
 def down(prompt, check):
     raise ModelUnavailable("free model limit reached, try again in a minute")
 

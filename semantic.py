@@ -9,6 +9,11 @@ TABLES = {
     "settlements": ["merchant_id", "date", "settled_amount", "settled_count"],
 }
 
+# Attempts: `transactions` with Duplicates removed. Every metric reads from this.
+# ponytail: Duplicates are exact copies, so any copy is the first; order by an
+# ingest column here if copies can ever differ.
+ATTEMPTS = "(SELECT DISTINCT ON (txn_id) * FROM transactions) AS transactions"
+
 # Allowed joins from transactions: table -> key column.
 JOINS = {"merchants": "merchant_id", "banks": "bank_id"}
 
