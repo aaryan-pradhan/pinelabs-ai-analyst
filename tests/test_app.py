@@ -67,3 +67,8 @@ def test_garden_celebrates_an_answer_and_storms_on_a_rejection_only(app):
     assert 'data-garden="storm"' in html(app) and 'data-garden="celebrate"' not in html(app)
     app.text_input[0].set_value("What is the weather in Mumbai?").run()  # no key: Model unavailable
     assert "Model unavailable" in html(app) and "data-garden" not in html(app)
+
+
+def test_replayed_answer_credits_the_model_not_its_maker(app):
+    page = html(app.run()) + " ".join(m.value for m in app.markdown)
+    assert "Claude Code" not in page and "written by the model" in page
