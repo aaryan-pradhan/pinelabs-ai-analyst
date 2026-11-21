@@ -8,3 +8,6 @@ __pycache__/
 *.stamp
 .streamlit/secrets.toml
 .llm_cache/
+
+# Video sources and renders: too large for the repo
+video/

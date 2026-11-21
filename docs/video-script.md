@@ -5,40 +5,26 @@ analyst gets them through it. Every point Pine Labs evaluates appears in the
 story at the moment it is needed. How the analyst works is explained only at
 the end, once the viewer has seen why it matters.
 
-Target length: about 4 minutes 45 seconds (the form allows 2 to 5).
+The form allows 2 to 5 minutes; at a relaxed pace the script reads in about
+4 minutes 45 seconds.
 
 ## How the video is made
 
-The video is built one chapter at a time. Each chapter has three parts:
+The voice comes first, and the video is built to fit it.
 
-1. **Screen clip.** A scripted browser run of the deployed app records the
-   chapter's actions, with smooth zooms onto each part the narration names.
-   Chapters 2 and 9 are Manim animations instead.
-2. **Voice.** Aaryan reads the chapter's "Say" text into one audio file per
-   chapter (`ch0.m4a` to `ch9.m4a`). Re-record a chapter on its own if a take
-   goes wrong; nothing else has to change.
-3. **Merge.** Each clip is timed to its voice file, and the ten chapters are
+1. **Voice.** Aaryan reads each chapter's "Say" text into its own audio file,
+   `ch0.m4a` to `ch9.m4a`. A bad take is re-recorded on its own.
+2. **Timing.** Each file is transcribed with word timestamps, so every zoom
+   and every typed question lands on the word that names it.
+3. **Screen clips.** A scripted browser run of the deployed app records each
+   chapter's actions at that timing, with smooth zooms. Chapters 2 and 9 are
+   Manim animations, timed the same way.
+4. **Merge.** Each clip is joined to its voice file, and the ten chapters are
    joined into one video.
-
-Read at a steady, relaxed pace, about 150 words a minute. The word counts
-below fit the chapter lengths at that pace.
 
 Deployed app: https://pinelabs-ai-analyst-nlszjuhrufcg9lmk9b6tjv.streamlit.app/
 
-| Chapter | Story beat | Length |
-|---------|------------|--------|
-| 0 | The hook | 18 s |
-| 1 | The scare | 40 s |
-| 2 | Nothing broke (Manim) | 27 s |
-| 3 | Now a real problem | 28 s |
-| 4 | Did it get fixed? | 22 s |
-| 5 | Finance joins in | 24 s |
-| 6 | A merchant manager logs in | 28 s |
-| 7 | Someone tries something dangerous | 12 s |
-| 8 | Can we trust any of this? | 26 s |
-| 9 | How it works (Manim) | 55 s |
-
-## Chapter 0: The hook (18 s)
+## Chapter 0: The hook
 
 **The viewer must understand:** the business problem, in human terms.
 
@@ -47,13 +33,13 @@ Deployed app: https://pinelabs-ai-analyst-nlszjuhrufcg9lmk9b6tjv.streamlit.app/
 analysis and an evidence-backed answer." Then cut to the app's opening page,
 garden in its day palette.
 
-**Say (45 words):**
+**Say:**
 "It's Monday morning. You run payments for thousands of merchants, and your
 dashboard says success rate fell four points last week. Your CEO wants to know
 why by noon. Pine Labs asked for an AI analyst that can answer that. Here it
 is."
 
-## Chapter 1: The scare (40 s)
+## Chapter 1: The scare
 
 **The viewer must understand:** one question returns a complete, checkable
 answer, with Facts kept apart from Hypotheses and Recommendations.
@@ -69,7 +55,7 @@ press Enter. Zoom in turn onto:
 
 Zoom back out onto the bridge chart for the last line.
 
-**Say (100 words):**
+**Say:**
 "So we ask it exactly that: why did success rate drop in Week 6? First, the
 headline. Success rate fell from 92.7% to 88.7%. Then the evidence. Every
 number is a Fact, and each one cites its table, its filters and its time
@@ -78,7 +64,7 @@ and the Recommendations, what to check next. And here is the exact SQL it ran,
 so nothing is taken on trust. But look at the chart. Almost all of the drop is
 a Mix effect. So what actually happened?"
 
-## Chapter 2: Nothing broke (Manim, 27 s)
+## Chapter 2: Nothing broke
 
 **The viewer must understand:** the average fell although no payment method
 got worse, because traffic moved (Simpson's paradox).
@@ -103,14 +89,14 @@ effect −0.01 percentage points, Week 6 88.7%. Fall in orange, as in the app.
 
 All numbers come from `payments.duckdb` with Duplicates removed.
 
-**Say (68 words):**
+**Say:**
 "Nothing broke. Each bar is a payment method. Its width is its share of
 traffic, its height is its success rate. From Week 5 to Week 6, the heights
 don't move. Only the widths do. Traffic moved from UPI and cards to netbanking
 and wallets, which always succeed less. That alone pulls the average down. The
 Mix effect is minus four points. The Rate effect is almost zero."
 
-## Chapter 3: Now a real problem (28 s)
+## Chapter 3: Now a real problem
 
 **The viewer must understand:** the same tool tells a real failure apart from
 a mix shift, and finds the one bank responsible.
@@ -119,14 +105,14 @@ a mix shift, and finds the one bank responsible.
 onto the headline, then onto Coastal Bank in the bridge chart with its 95%
 interval, then onto the Recommendations.
 
-**Say (70 words):**
+**Say:**
 "A week later, card payments dip by almost two points. Is this another mix
 shift? We ask which bank got worse on cards in Week 7. This time the answer is
 different. The drop is inside one bank. Coastal Bank fell from 91.5% to 77.8%.
 Its 95% interval is nowhere near zero, so this is not noise. This one is real,
 and the Recommendations say what to check next."
 
-## Chapter 4: Did it get fixed? (22 s)
+## Chapter 4: Did it get fixed?
 
 **The viewer must understand:** an ambiguous question gets a stated, editable
 assumption instead of a silent guess.
@@ -135,13 +121,13 @@ assumption instead of a silent guess.
 Window chip ("Week 7 vs Week 8") and open it to show it can be changed. Close
 it, then zoom onto the headline naming Coastal Bank.
 
-**Say (55 words):**
+**Say:**
 "Your CEO then asks: how's success rate lately? That's vague. Lately since
 when? The analyst doesn't guess silently. It states its assumption, the latest
 two weeks, and you can change it right here. And the answer closes the story:
 Coastal Bank is back, up four points in Week 8."
 
-## Chapter 5: Finance joins in (24 s)
+## Chapter 5: Finance joins in
 
 **The viewer must understand:** when two sources disagree, the analyst says
 which, where and by how much.
@@ -149,14 +135,14 @@ which, where and by how much.
 **Screen:** Type "Do settlements match transactions in wk5?" and press Enter.
 Zoom onto the headline, then onto electronics in the by-category table.
 
-**Say (60 words):**
+**Say:**
 "Next, finance asks: does the money match? Settlements are the money actually
 paid out to merchants. The analyst checks them against successful payments,
 category by category. In Week 5, electronics merchants were paid about 3% less
 than their payments add up to. Two sources disagree, and the analyst says
 exactly where."
 
-## Chapter 6: A merchant manager logs in (28 s)
+## Chapter 6: A merchant manager logs in
 
 **The viewer must understand:** each role sees only its own data, and the
 system enforces that before any query runs.
@@ -166,7 +152,7 @@ show the garden turning to night. Type "Show me settlements" and press Enter;
 zoom onto the rejection reason. Then type "What is the success rate for
 electronics?" and press Enter; zoom onto the rejection reason.
 
-**Say (70 words):**
+**Say:**
 "Now a different user logs in: a merchant manager for grocery. The garden
 turns to night, so you always know whose view this is. They ask for
 settlements and are refused, with the reason: only an Analyst can see
@@ -174,19 +160,19 @@ Settlements. They ask about electronics, a category that isn't theirs, and are
 refused again. These rules are checked on the SQL itself, before any query
 runs."
 
-## Chapter 7: Someone tries something dangerous (12 s)
+## Chapter 7: Someone tries something dangerous
 
 **The viewer must understand:** the analyst cannot change or damage the data.
 
 **Screen:** Switch Role back to Analyst. Type "Delete the failed
 transactions" and press Enter. Zoom onto the rejection reason.
 
-**Say (30 words):**
+**Say:**
 "Then someone tries something dangerous: delete the failed transactions. The
 analyst refuses. Only a single SELECT statement may run, so it can never
 change the data."
 
-## Chapter 8: Can we trust any of this? (26 s)
+## Chapter 8: Can we trust any of this?
 
 **The viewer must understand:** the numbers are cleaned and the system is
 tested against known answers.
@@ -195,14 +181,14 @@ tested against known answers.
 Enter. Zoom onto 2,252. Then press "Run eval" and zoom onto the pass rate,
 then the Pass column.
 
-**Say (62 words):**
+**Say:**
 "Last question: can you trust any of this? Real data is messy. This data has
 2,252 duplicate rows. The analyst finds them, removes them before counting
 anything, and says so on the answer. And it is tested. Ten questions with
 known answers run through the same pipeline, including the refusals you just
 saw. Ten out of ten pass."
 
-## Chapter 9: How it works (Manim, 55 s)
+## Chapter 9: How it works
 
 **The viewer must understand:** the model never produces a number; every
 number comes from validated, executed SQL.
@@ -214,7 +200,7 @@ Validator, DuckDB, Analysis (decomposition, intervals, data checks), Answer. A
 track from the model to Answer, so the split is visible. End on the README's
 limitations section for the last two sentences.
 
-**Say (135 words):**
+**Say:**
 "Here's how it works. Your question goes to a language model, but the model
 never writes a number. It only picks a plan from a semantic layer: a fixed
 list of metrics, like success rate, and the ways you can split them. That
