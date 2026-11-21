@@ -41,6 +41,7 @@ def validate(sql, role=ANALYST):
     if unknown:
         raise Rejected(f"Table not in the semantic layer: {', '.join(unknown)}.")
     allowed = {c for t in tables for c in TABLES[t]}
+    allowed |= {a.alias for a in tree.find_all(exp.Alias)}  # ORDER BY n, HAVING n > 5
     unknown = sorted({c.name for c in tree.find_all(exp.Column)} - allowed)
     if unknown:
         raise Rejected(f"Column not in the semantic layer: {', '.join(unknown)}.")

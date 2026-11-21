@@ -336,3 +336,9 @@ def test_join_without_a_key_is_rejected(join, db_path):
     with pytest.raises(Rejected, match="Join without a key"):
         ask("Count transactions per merchant name", ANALYST, ad_hoc(f"SELECT name, COUNT(*) {join} GROUP BY name"),
             db_path)
+
+
+def test_ad_hoc_sql_may_order_by_its_own_alias(db_path):
+    sql = "SELECT status, COUNT(*) AS n FROM transactions GROUP BY status ORDER BY n DESC"
+    rows = ask("Which status is most common?", ANALYST, ad_hoc(sql), db_path).result["rows"]
+    assert rows["status"].iloc[0] == "success"
