@@ -2,6 +2,8 @@
 
 Fields seen so far (`*` = required). Personal values are filled in on the site, never stored here.
 
+Deployed app: https://pinelabs-ai-analyst-nlszjuhrufcg9lmk9b6tjv.streamlit.app/ (Streamlit Community Cloud, from `main`; secrets live in Streamlit settings, never in the repo).
+
 | Field | Notes |
 |-------|-------|
 | Full Name * | |
