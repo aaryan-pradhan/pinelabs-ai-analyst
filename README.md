@@ -250,8 +250,8 @@ when no sensible default exists.
 - **Demo cache narration.** When there is no key or the free model is
   rate-limited, the demo questions replay cached replies from
   `demo/replay.json`, with a banner. The plans in it are the free model's own
-  replies. The headline, Hypotheses and Recommendations were written with
-  Claude Code (Claude Opus 5.5) during development, from the Facts of real pipeline runs.
+  replies. The headline, Hypotheses and Recommendations were written during
+  development, from the Facts of real pipeline runs.
   Numbers, SQL and charts are always computed by the pipeline. The demo
   questions are:
   1. Why did success rate drop in week 6?

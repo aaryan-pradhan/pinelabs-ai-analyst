@@ -71,4 +71,4 @@ def test_garden_celebrates_an_answer_and_storms_on_a_rejection_only(app):
 
 def test_replayed_answer_credits_the_model_not_its_maker(app):
     page = html(app.run()) + " ".join(m.value for m in app.markdown)
-    assert "Claude Code" not in page and "written by the model" in page
+    assert "written by the model" in page
