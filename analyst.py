@@ -36,6 +36,7 @@ class Answer:
     hypotheses: list  # model narration, not evidence
     recommendations: list  # model narration, not evidence
     dq: dict  # data-quality numbers, caveats and confidence
+    assumptions: dict  # defaults chosen for what the question left open, editable by the user
 
 
 FILTERABLE = [d for d in DIMENSIONS if d not in ("week", "failure_reason")]  # weeks are chosen separately
@@ -51,7 +52,8 @@ def plan_prompt(question):
     return (
         "Choose a plan for the question from the semantic layer. Reply with JSON only, e.g.\n"
         '{"metric": "success_rate", "weeks": [6, 7], "filters": {"payment_method": "card"}}\n'
-        "weeks is [base week, current week] as integers 1-8 (wk8 is the latest).\n"
+        "weeks is [base week, current week] as integers 1-8 (wk8 is the latest); "
+        "omit weeks when the question names no week.\n"
         "For whether Settlements match transactions, use settlement_gap with one week, e.g.\n"
         '{"metric": "settlement_gap", "weeks": [5]}\n'
         "filters is optional: {dimension: value} when the question names one Segment, "
@@ -68,8 +70,8 @@ def usable(plan):
     n_weeks, dims = ANSWERED[plan["metric"]]
     return (isinstance(filters, dict) and set(filters) <= set(dims)
             and all(isinstance(v, str) for v in filters.values())
-            and isinstance(weeks, list) and len(weeks) == n_weeks
-            and all(type(w) is int and w in WEEKS for w in weeks))
+            and (weeks is None or isinstance(weeks, list) and len(weeks) == n_weeks
+                 and all(type(w) is int and w in WEEKS for w in weeks)))
 
 
 def narration_prompt(question, computed_headline, facts):
@@ -126,9 +128,13 @@ def ask(question, role, llm, db_path=DB_PATH):
     except ModelUnavailable as e:
         e.sql = [sql for sql, _ in planned_sql(DEFAULT_PLAN)]
         raise
+    assumptions = {}
+    if "weeks" not in plan:  # latest complete Week(s) (D16)
+        plan["weeks"] = assumptions["weeks"] = DEFAULT_PLAN["weeks"][-ANSWERED[plan["metric"]][0]:]
     weeks = plan["weeks"]
     if plan["metric"] == "settlement_gap":
-        return settlement_answer(question, llm, weeks[0], db_path)
+        return settlement_answer(question, llm, weeks[0], db_path, assumptions)
+    assumptions["denominator"] = "all Attempts excluding Duplicates"  # D19
     base, current = weeks
     filters = plan.setdefault("filters", {})
     cited = [f"{k} = {v}" for k, v in filters.items()]
@@ -161,10 +167,11 @@ def ask(question, role, llm, db_path=DB_PATH):
         raise
     return Answer(story["headline"], facts, d,
                   [{k: s[k] for k in ("segment", "mix", "rate")} for s in d["segments"]],
-                  story["hypotheses"], story["recommendations"], dq.check(db_path, weeks, [overall_sql, seg_sql], by_week))
+                  story["hypotheses"], story["recommendations"], dq.check(db_path, weeks, [overall_sql, seg_sql], by_week),
+                  assumptions)
 
 
-def settlement_answer(question, llm, week, db_path):
+def settlement_answer(question, llm, week, db_path, assumptions):
     """Settlement gap by category for one Week (D22)."""
     window = f"wk{week}"
     sql, tables = validate(compile_sql(["settlement_gap"], ["category"], [week]))
@@ -177,7 +184,7 @@ def settlement_answer(question, llm, week, db_path):
         e.sql = [sql]
         raise
     return Answer(story["headline"], facts, {}, [{"segment": c, "gap": g} for c, g in gaps.items()],
-                  story["hypotheses"], story["recommendations"], dq.check(db_path, [week], [sql], {}))
+                  story["hypotheses"], story["recommendations"], dq.check(db_path, [week], [sql], {}), assumptions)
 
 
 def gap_headline(gaps, window):

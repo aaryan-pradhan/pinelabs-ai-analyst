@@ -218,3 +218,10 @@ def test_filter_that_matches_no_attempts_is_refused_with_its_sql(db_path):
     with pytest.raises(ModelUnavailable, match="No Attempts match") as err:
         ask("Which bank got worse on cards in week 7?", "analyst", fake_llm(plan), db_path)
     assert all("Cards'' OR ''1''=''1'" in s for s in err.value.sql)
+
+
+def test_vague_question_defaults_to_latest_weeks_and_all_attempts(db_path):
+    answer = ask("How's success rate lately?", "analyst", fake_llm({"metric": "success_rate"}), db_path)
+
+    assert answer.assumptions == {"weeks": [7, 8], "denominator": "all Attempts excluding Duplicates"}
+    assert all(fact.window == "wk7 vs wk8" for fact in answer.facts)
