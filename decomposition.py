@@ -4,7 +4,11 @@ With s = a Segment's share of Attempts and r = its Success rate:
   Mix effect  = sum (s1 - s0)(r0 + r1)/2
   Rate effect = sum (r1 - r0)(s0 + s1)/2
 They sum exactly to the total change, sum s1*r1 - sum s0*r0.
+
+Each Segment's rate change also carries the half-width of its 95% interval,
+1.96 * sqrt(r0(1 - r0)/a0 + r1(1 - r1)/a1), so a reader can tell a move from noise.
 """
+import math
 
 
 def decompose(base, current):
@@ -22,6 +26,7 @@ def decompose(base, current):
             "rate_before": r0, "rate_after": r1,
             "mix": (s1 - s0) * (r0 + r1) / 2,
             "rate": (r1 - r0) * (s0 + s1) / 2,
+            "ci": 1.96 * math.sqrt(r0 * (1 - r0) / a0 + r1 * (1 - r1) / a1) if a0 and a1 else None,
         })
     return {
         "total": sum(s["share_after"] * s["rate_after"] - s["share_before"] * s["rate_before"]

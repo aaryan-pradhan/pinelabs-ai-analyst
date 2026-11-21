@@ -1,0 +1,27 @@
+# D36: the day palette of the garden room; app.py's CSS swaps to night for a Merchant manager.
+[client]
+toolbarMode = "minimal"
+
+[theme]
+base = "light"
+primaryColor = "#1d2f2a"
+backgroundColor = "#fdfcf7"
+secondaryBackgroundColor = "#f1eee4"
+textColor = "#1d2f2a"
+linkColor = "#1d2f2a"
+borderColor = "#d9d1bd"
+dataframeBorderColor = "#d9d1bd"
+dataframeHeaderBackgroundColor = "#f1eee4"
+codeBackgroundColor = "#f1eee4"
+codeTextColor = "#1d2f2a"
+font = "Source Code Pro:https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500;600&display=swap"
+codeFont = "Source Code Pro:https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500;600&display=swap"
+headingFontWeights = [500, 500, 500, 500, 500, 500]
+baseFontSize = 15
+baseRadius = "0px"
+buttonRadius = "0px"
+showWidgetBorder = true
+
+[theme.sidebar]
+backgroundColor = "#ece5d4"
+secondaryBackgroundColor = "#f1eee4"
