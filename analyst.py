@@ -12,8 +12,8 @@ import dq
 from executor import run
 from generator import DB_PATH
 from llm import ModelUnavailable
-from semantic import DIMENSIONS
-from validator import validate
+from semantic import DIMENSIONS, TABLES
+from validator import Rejected, validate
 
 
 @dataclass
@@ -37,6 +37,7 @@ class Answer:
     recommendations: list  # model narration, not evidence
     dq: dict  # data-quality numbers, caveats and confidence
     assumptions: dict  # defaults chosen for what the question left open, editable by the user
+    result: dict = None  # ad-hoc answers only: {"sql", "tables", "rows"}, rows as a DataFrame
 
 
 class AskBack(Exception):
@@ -49,6 +50,7 @@ FILTERABLE = [d for d in DIMENSIONS if d not in ("week", "failure_reason")]  # w
 # since the Source mismatch check covers the whole Week. Other metrics wait in the semantic layer.
 ANSWERED = {"success_rate": (2, FILTERABLE), "settlement_gap": (1, [])}
 LEADS = ["payment_method", "bank", "category"]  # decomposed every time; the best one leads (D24)
+TABLE_LIST = "; ".join(f"{t}({', '.join(cols)})" for t, cols in TABLES.items())
 WEEKS = range(1, 9)  # wk1 = 28 Sep 2026 ... wk8 = 16-22 Nov 2026
 
 
@@ -63,7 +65,12 @@ def plan_prompt(question):
         "filters is optional: {dimension: value} when the question names one Segment, "
         "e.g. payment_method is upi, card, netbanking or wallet.\n"
         f"Metrics: {', '.join(ANSWERED)}\nFilter dimensions (success_rate only): {', '.join(FILTERABLE)}\n"
-        "Only if the question names none of these metrics, reply instead with "
+        "If no metric above fits but these tables can answer it, reply instead with the one DuckDB "
+        'statement the question asks for, e.g. {"sql": "SELECT transactions.status, COUNT(*) AS n '
+        'FROM transactions GROUP BY 1 ORDER BY n DESC"}\n'
+        f"Tables: {TABLE_LIST}. Join merchants and banks to transactions on merchant_id and bank_id; "
+        "write full table names, never table aliases.\n"
+        "Only if the question is too vague for either, reply instead with "
         '{"ask": <one short question back to the user>}.\n'
         f"Question: {question}"
     )
@@ -71,8 +78,9 @@ def plan_prompt(question):
 
 def usable(plan):
     weeks, filters = plan.get("weeks"), plan.get("filters", {})
-    if "ask" in plan:
-        return isinstance(plan["ask"], str) and bool(plan["ask"].strip())
+    for free_text in ("ask", "sql"):
+        if free_text in plan:
+            return isinstance(plan[free_text], str) and bool(plan[free_text].strip())
     if plan.get("metric") not in ANSWERED:
         return False
     n_weeks, dims = ANSWERED[plan["metric"]]
@@ -139,6 +147,8 @@ def ask(question, role, llm, db_path=DB_PATH, weeks=None):
         raise
     if "ask" in plan:
         raise AskBack(plan["ask"])
+    if "sql" in plan:
+        return ad_hoc_answer(plan["sql"], role, db_path)
     assumptions = {}
     if weeks is not None:
         plan["weeks"] = assumptions["weeks"] = weeks
@@ -187,6 +197,23 @@ def ask(question, role, llm, db_path=DB_PATH, weeks=None):
                   [{k: s[k] for k in ("segment", "mix", "rate")} for s in d["segments"]],
                   story["hypotheses"], story["recommendations"], dq.check(db_path, weeks, [overall_sql, seg_sql], by_week, role.category),
                   assumptions)
+
+
+def ad_hoc_answer(sql, role, db_path):
+    """Model-written SQL for a question the semantic layer's metrics cannot express (D6)."""
+    try:
+        sql, tables = validate(sql, role)
+        rows = run(sql, db_path)
+    except Rejected as e:
+        e.sql = [sql]
+        raise
+    assumptions = {} if role.category is None else {"scope": role.category}
+    caveats = ["Model-written SQL outside the semantic layer's metrics: it reads raw tables, "
+               "so Duplicates are counted unless the SQL removes them. Check the SQL before relying on it."]
+    return Answer("Ad-hoc query: model-written SQL, checked by the validator before it ran.",
+                  facts=[], decomposition={}, chart=[], hypotheses=[], recommendations=[],
+                  dq={"confidence": "Low: the SQL was written by a free model.", "caveats": caveats},
+                  assumptions=assumptions, result={"sql": sql, "tables": tables, "rows": rows})
 
 
 def settlement_answer(question, role, llm, week, db_path, assumptions):
