@@ -17,6 +17,9 @@ ATTEMPTS = "(SELECT DISTINCT ON (txn_id) * FROM transactions) AS transactions"
 # Allowed joins from transactions: table -> key column.
 JOINS = {"merchants": "merchant_id", "banks": "bank_id"}
 
+# Week is Monday to Sunday, wk1 = 28 Sep 2026.
+WEEK = "CAST(FLOOR(date_diff('day', DATE '2026-09-28', CAST(ts AS DATE)) / 7) AS INTEGER) + 1"
+
 METRICS = {
     "attempts": "COUNT(*)",
     "successful_attempts": "COUNT(*) FILTER (WHERE status = 'success')",
@@ -25,14 +28,12 @@ METRICS = {
     "gmv": "SUM(amount) FILTER (WHERE status = 'success')",
     "average_ticket": "AVG(amount) FILTER (WHERE status = 'success')",
     # A reason's share of the Week's failed Attempts; needs the week dimension.
-    "failure_share": "COUNT(*) FILTER (WHERE status = 'failed') / SUM(COUNT(*) FILTER (WHERE status = 'failed'))"
-                     " OVER (PARTITION BY CAST(FLOOR(date_diff('day', DATE '2026-09-28', CAST(ts AS DATE)) / 7)"
-                     " AS INTEGER) + 1)",
+    "failure_share": "COUNT(*) FILTER (WHERE status = 'failed')"
+                     f" / SUM(COUNT(*) FILTER (WHERE status = 'failed')) OVER (PARTITION BY {WEEK})",
 }
 
 DIMENSIONS = {
-    # Week is Monday to Sunday, wk1 = 28 Sep 2026.
-    "week": "CAST(FLOOR(date_diff('day', DATE '2026-09-28', CAST(ts AS DATE)) / 7) AS INTEGER) + 1",
+    "week": WEEK,
     "payment_method": "payment_method",
     "bank": "COALESCE(banks.name, 'Unknown bank')",  # null bank_id is its own Segment
     # Failed Attempts only; successful ones group under NULL.
