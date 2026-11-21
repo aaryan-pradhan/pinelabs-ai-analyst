@@ -54,6 +54,8 @@ def validate(sql, role=ANALYST):
 
 def scoped(tree, tables, role):
     """`tree` limited to the role's category, joining merchants if it is not joined."""
+    if "settlements" in tables:
+        raise Rejected(f"A {role.name} cannot see Settlements; only an Analyst can.")
     # ponytail: scopes the outer query only; safe because SQL comes from the compiler,
     # whose one subquery is the unfiltered Attempts source. Scope subqueries if plans ever nest.
     named = {eq.expression.name for eq in tree.find_all(exp.EQ)

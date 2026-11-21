@@ -278,3 +278,10 @@ def test_merchant_manager_naming_another_category_is_blocked(db_path):
               fake_llm({**WK6_PLAN, "filters": {"category": "grocery"}}), db_path)
     assert "scope" not in own.assumptions  # the question named the category
     assert all(f.sql.count("merchants.category = 'grocery'") == 1 for f in own.facts)
+
+
+def test_merchant_manager_plan_that_sneaks_in_settlements_is_blocked(db_path):
+    sneaky = {"metric": "settlement_gap", "weeks": [5]}  # a success rate question, planned as Settlements
+
+    with pytest.raises(Rejected, match="Merchant manager cannot see Settlements"):
+        ask("Why did success rate drop in week 5?", GROCERY, fake_llm(sneaky), db_path)
