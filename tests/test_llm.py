@@ -84,3 +84,13 @@ def test_every_reply_unusable_says_so_not_limit_reached(tmp_path):
 
     with pytest.raises(ModelUnavailable, match="unusable reply"):
         complete("p", must_be_json, post, tmp_path)
+
+
+def test_the_model_that_answered_is_known_on_replay(tmp_path):
+    first, second = llm.MODELS[:2]
+    post = fake_post({first: rate_limited(), second: "plan"}, [])
+
+    complete("p", post=post, cache_dir=tmp_path)
+    complete("p", post=post, cache_dir=tmp_path)
+    assert llm.answered_by("p", cache_dir=tmp_path) == second
+    assert llm.answered_by("never asked", cache_dir=tmp_path) is None

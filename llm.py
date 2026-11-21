@@ -36,11 +36,21 @@ def accept_any(text):
     pass
 
 
+def saved_reply(prompt, cache_dir):
+    return Path(cache_dir) / f"{hashlib.sha256(prompt.encode()).hexdigest()}.txt"
+
+
+def answered_by(prompt, cache_dir=CACHE_DIR):
+    """The free model whose saved reply `prompt` replays, or None if not recorded."""
+    model = saved_reply(prompt, cache_dir).with_suffix(".model")
+    return model.read_text() if model.exists() else None
+
+
 def complete(prompt, check=accept_any, post=post, cache_dir=CACHE_DIR):
     """The first free model's reply that passes `check` (raises ValueError if unusable)."""
     # ponytail: cache keyed on prompt only, no expiry, also live on deploy; fine while the
     # data is a fixed seed. Add expiry if the data starts changing.
-    saved = Path(cache_dir) / f"{hashlib.sha256(prompt.encode()).hexdigest()}.txt"
+    saved = saved_reply(prompt, cache_dir)
     if saved.exists():
         return saved.read_text()
     key = os.environ.get("OPENROUTER_API_KEY")
@@ -59,6 +69,7 @@ def complete(prompt, check=accept_any, post=post, cache_dir=CACHE_DIR):
             continue
         saved.parent.mkdir(parents=True, exist_ok=True)
         saved.write_text(text)
+        saved.with_suffix(".model").write_text(model)
         return text
     if unusable:
         raise ModelUnavailable("the free model returned an unusable reply, try rephrasing")
