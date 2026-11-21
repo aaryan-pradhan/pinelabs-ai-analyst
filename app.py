@@ -26,7 +26,7 @@ if st.sidebar.selectbox("Role", ["Analyst", "Merchant manager"]) == "Merchant ma
 if st.sidebar.button("Run eval"):  # 10 known-answer questions (D26)
     try:
         with st.spinner("Running the 10 eval questions on the free model"):
-            result, source = evaluate.live(), "Live run on the free model"
+            result, source = evaluate.live(), "Run now on the free model (identical prompts replay saved replies)"
     except llm.NoQuota as e:  # no key or quota: the committed result, labelled
         result = json.loads(evaluate.RESULT_PATH.read_text())
         source = f"Free model unavailable ({e}), so this is the last committed result from {result['date']}"

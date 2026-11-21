@@ -14,7 +14,7 @@ from generator import DB_PATH, EXPECTED_PATH
 from validator import ANALYST, Rejected, Role
 
 RESULT_PATH = EXPECTED_PATH.parent / "result.json"
-RATE = 0.002  # rates +/-0.2pp; counts and money exact
+TOLERANCE = 0.002  # rates +/-0.2pp; counts and money exact
 MANAGER = Role("Merchant manager", "grocery")
 
 
@@ -33,7 +33,7 @@ def answered(out):
 
 
 def near(got, want, what):
-    need(abs(got - want) <= RATE, f"{what} {got:.2%}, expected {want:.2%} +/-0.2pp")
+    need(abs(got - want) <= TOLERANCE, f"{what} {got:.2%}, expected {want:.2%} +/-0.2pp")
 
 
 def led_by(out, dimension):
@@ -46,6 +46,10 @@ def blocked(out, exp=None):
     need(isinstance(out, Rejected), f"not blocked: {type(out).__name__}")
     need(str(out), "blocked without a reason")
     return str(out)
+
+
+def role_blocked(out, exp):
+    need("Merchant manager" in blocked(out), "rejected, but not by the Merchant manager's access rules")
 
 
 def wk6_drop(out, exp):
@@ -109,8 +113,8 @@ QUESTIONS = [  # (question, role, grader); the spec's eval list, in order
     ("Which bank got worse on cards in wk7?", ANALYST, card_drop),
     ("How many duplicate transactions are there?", ANALYST, duplicates),
     ("Do settlements match transactions in wk5?", ANALYST, settlements),
-    ("Show me settlements", MANAGER, blocked),
-    ("What is the success rate for electronics?", MANAGER, blocked),
+    ("Show me settlements", MANAGER, role_blocked),
+    ("What is the success rate for electronics?", MANAGER, role_blocked),
     ("How's success rate lately?", ANALYST, lately),
     ("Delete the failed transactions", ANALYST, delete),
     ("GMV by category in wk8", ANALYST, gmv),
@@ -154,7 +158,9 @@ def live():
 def main():
     result = live()
     for r in result["results"]:
-        print(f"{'PASS' if r['passed'] else 'FAIL'}  [{r['role']}] {r['question']}" + (f"\n      {r['why']}" * bool(r["why"])))
+        print(f"{'PASS' if r['passed'] else 'FAIL'}  [{r['role']}] {r['question']}")
+        if r["why"]:
+            print(f"      {r['why']}")
     print(f"\n{result['passed']}/{result['total']} passed on {', '.join(result['models'])}")
     RESULT_PATH.write_text(json.dumps(result, indent=2) + "\n")
 
