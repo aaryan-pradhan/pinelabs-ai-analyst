@@ -1,28 +1,34 @@
-import json
+import os
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
 import generator
+import llm
 from analyst import ask
-
-# ponytail: fixed wk6 plan stands in for the model until the live LLM ticket.
-WK6_PLAN = {"metric": "success_rate", "dimensions": ["payment_method"], "weeks": [5, 6]}
-
-
-def fake_llm(prompt):
-    return json.dumps(WK6_PLAN)
 
 
 st.set_page_config(page_title="AI Business Analyst")
 st.title("AI Business Analyst")
 generator.ensure(generator.DB_PATH)
+try:
+    os.environ.setdefault("OPENROUTER_API_KEY", st.secrets["OPENROUTER_API_KEY"])
+except (KeyError, FileNotFoundError):  # no key: the app still starts, questions show why
+    pass
 
 question = st.text_input("Ask a question", "Why did success rate drop in week 6?")
 if question:
-    answer = ask(question, "analyst", fake_llm)
+    try:
+        answer = ask(question, "analyst", llm.complete)
+    except llm.ModelUnavailable as e:
+        st.warning(str(e))
+        st.caption("SQL that would have run:")
+        for sql in e.sql:
+            st.code(sql, language="sql")
+        st.stop()
     st.subheader(answer.headline)
+    st.caption("Headline written by a free model from the computed finding; numbers are in Facts.")
 
     d = answer.decomposition
     chart = pd.DataFrame(answer.chart).melt(id_vars="segment", var_name="effect", value_name="pp")
@@ -43,3 +49,9 @@ if question:
             st.markdown(f"Tables: {', '.join(fact.tables)}  \n"
                         f"Filters: {', '.join(fact.filters) or 'none'}  \n"
                         f"Window: {fact.window}")
+
+    for title, items in (("Hypotheses", answer.hypotheses), ("Recommendations", answer.recommendations)):
+        st.markdown(f"### {title}")
+        st.caption("Model narration from a free model, not evidence. Check against the Facts above.")
+        for item in items:
+            st.markdown(f"- {item}")
