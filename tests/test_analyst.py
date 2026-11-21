@@ -285,3 +285,9 @@ def test_merchant_manager_plan_that_sneaks_in_settlements_is_blocked(db_path):
 
     with pytest.raises(Rejected, match="Merchant manager cannot see Settlements"):
         ask("Why did success rate drop in week 5?", GROCERY, fake_llm(sneaky), db_path)
+
+
+def test_merchant_manager_default_plan_sql_is_scoped_by_the_validator(db_path):
+    with pytest.raises(ModelUnavailable) as err:  # no plan, so only the validator scopes it
+        ask("How are payments doing lately?", GROCERY, down, db_path)
+    assert all("merchants.category = 'grocery'" in s for s in err.value.sql)
