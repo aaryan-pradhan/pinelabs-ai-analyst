@@ -1,0 +1,34 @@
+<!doctype html>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;600&display=block" rel="stylesheet">
+<style>
+  html, body {margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #e9e4d4}
+  body {font-family: "Source Code Pro", monospace; color: #1d2f2a; display: grid; place-items: center}
+  #card {width: 1180px; background: #fdfcf7; padding: 64px 80px 72px;
+    box-shadow: 0 0 0 4px #1d3a33, 0 0 0 8px #fdfcf7, 0 0 0 12px #1d3a33, 16px 16px 0 12px rgba(0,0,0,.18)}
+  .tag {display: inline-block; background: #1d3a33; color: #fdfcf7; padding: 3px 10px; font-size: 19px;
+    letter-spacing: .06em; text-transform: uppercase}
+  h1 {font-size: 46px; font-weight: 600; margin: 22px 0 8px; letter-spacing: -.01em}
+  .rule {color: #d9d1bd; font-size: 22px; overflow: hidden; white-space: nowrap; margin: 26px 0}
+  p {font-size: 27px; line-height: 1.55; margin: 14px 0 0}
+  mark {background: linear-gradient(#f2b25a88, #f2b25a88) no-repeat 0 88% / 0% 42%; color: inherit;
+    transition: background-size 1100ms cubic-bezier(.65, 0, .35, 1)}
+  mark.on {background-size: 100% 42%}
+</style>
+<div id="card">
+  <span class="tag">Pine Labs · Case Study 02</span>
+  <h1>Enterprise AI Business Analyst</h1>
+  <div class="rule">==============================================================================</div>
+  <div data-cam id="context">
+    <span class="tag">Customer context</span>
+    <p>A payments business has transaction, merchant, bank, payment-method and settlement data spread across
+      several datasets. Leaders ask questions like <mark id="q">"why did success rates change?"</mark>, "which
+      segments drove the decline?", "what should we do?".</p>
+  </div>
+  <div class="rule">==============================================================================</div>
+  <div data-cam id="goal">
+    <span class="tag">Goal</span>
+    <p><mark id="g">Build an AI analyst that turns a natural-language business question into safe, reproducible
+      data analysis and an evidence-backed answer.</mark></p>
+  </div>
+</div>
