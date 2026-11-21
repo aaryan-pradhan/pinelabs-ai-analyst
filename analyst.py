@@ -72,7 +72,7 @@ def plan_prompt(question):
 def usable(plan):
     weeks, filters = plan.get("weeks"), plan.get("filters", {})
     if "ask" in plan:
-        return isinstance(plan["ask"], str)
+        return isinstance(plan["ask"], str) and bool(plan["ask"].strip())
     if plan.get("metric") not in ANSWERED:
         return False
     n_weeks, dims = ANSWERED[plan["metric"]]
@@ -144,7 +144,7 @@ def ask(question, role, llm, db_path=DB_PATH, weeks=None):
         plan["weeks"] = assumptions["weeks"] = weeks
         if not usable(plan):
             raise ValueError(f"not a window for {plan['metric']}: {weeks}")
-    if "weeks" not in plan:  # latest complete Week(s) (D16)
+    if plan.get("weeks") is None:  # latest complete Week(s) (D16)
         plan["weeks"] = assumptions["weeks"] = DEFAULT_PLAN["weeks"][-ANSWERED[plan["metric"]][0]:]
     weeks = plan["weeks"]
     if plan["metric"] == "settlement_gap":

@@ -226,6 +226,8 @@ def test_vague_question_defaults_to_latest_weeks_and_all_attempts(db_path):
 
     assert answer.assumptions == {"weeks": [7, 8], "denominator": "all Attempts excluding Duplicates"}
     assert all(fact.window == "wk7 vs wk8" for fact in answer.facts)
+    null = ask("How's success rate lately?", "analyst", fake_llm({"metric": "success_rate", "weeks": None}), db_path)
+    assert null.assumptions["weeks"] == [7, 8]  # a null window is no window
 
 
 def test_edited_window_reruns_for_the_edited_weeks(db_path):
@@ -243,3 +245,5 @@ def test_question_with_no_sensible_default_is_asked_back(db_path):
 
     with pytest.raises(AskBack, match="Which metric do you mean"):
         ask("How are things?", "analyst", fake_llm(back), db_path)
+    with pytest.raises(ModelUnavailable, match="unusable reply"):  # nothing to ask the user
+        ask("How are things?", "analyst", fake_llm({"ask": " "}), db_path)
