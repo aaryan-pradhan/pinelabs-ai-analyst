@@ -45,4 +45,4 @@ Full brief: [brief.md](brief.md). Deadline: **22 Nov 2026, 6:00 PM IST**. Demo-r
 
 ## Open questions
 
-None. Shared understanding confirmed 21 Nov. Next step (D11): `docs/PLAN.md`.
+None. Shared understanding confirmed 21 Nov. Spec: issue #1. Next: `/to-tickets`.
