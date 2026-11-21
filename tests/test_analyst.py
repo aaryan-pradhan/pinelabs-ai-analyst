@@ -225,3 +225,13 @@ def test_vague_question_defaults_to_latest_weeks_and_all_attempts(db_path):
 
     assert answer.assumptions == {"weeks": [7, 8], "denominator": "all Attempts excluding Duplicates"}
     assert all(fact.window == "wk7 vs wk8" for fact in answer.facts)
+
+
+def test_edited_window_reruns_for_the_edited_weeks(db_path):
+    answer = ask("How's success rate lately?", "analyst", fake_llm({"metric": "success_rate"}), db_path,
+                 weeks=[5, 6])
+
+    assert answer.assumptions["weeks"] == [5, 6]
+    assert all(fact.window == "wk5 vs wk6" for fact in answer.facts)
+    assert answer.decomposition["dimension"] == "payment_method"  # the planted wk6 mix shift
+    assert -0.05 < answer.decomposition["total"] < -0.03

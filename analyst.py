@@ -122,13 +122,18 @@ def planned_sql(plan):
             for dims in [["week"]] + [["week", d] for d in leads(plan)]]
 
 
-def ask(question, role, llm, db_path=DB_PATH):
+def ask(question, role, llm, db_path=DB_PATH, weeks=None):
+    """`weeks` re-runs the question with an edited window Assumption."""
     try:
         plan = reply(llm, plan_prompt(question), usable)
     except ModelUnavailable as e:
         e.sql = [sql for sql, _ in planned_sql(DEFAULT_PLAN)]
         raise
     assumptions = {}
+    if weeks is not None:
+        plan["weeks"] = assumptions["weeks"] = weeks
+        if not usable(plan):
+            raise ValueError(f"not a window for {plan['metric']}: {weeks}")
     if "weeks" not in plan:  # latest complete Week(s) (D16)
         plan["weeks"] = assumptions["weeks"] = DEFAULT_PLAN["weeks"][-ANSWERED[plan["metric"]][0]:]
     weeks = plan["weeks"]
