@@ -85,12 +85,12 @@ def build(path, seed=42):
         "amount": np.round(rng.lognormal(7, 1, n), 2),
     })
 
-    # Exact successes per (week, method) keep each method's rate flat week to week,
+    # Exact successes per (week, method, bank) keep each rate flat week to week,
     # except Coastal Bank's cards in wk7 (story b).
     week = day // 7
-    drop = (week == 6) & (method == "card") & (tx["bank_id"] == DROP_BANK).to_numpy()
     success = np.zeros(n, dtype=bool)
-    for (w, m, dropped), idx in tx.groupby([week, method, drop]).indices.items():
+    for (w, m, b), idx in tx.groupby([week, method, tx["bank_id"]]).indices.items():
+        dropped = (w, m, b) == (6, "card", DROP_BANK)
         k = round(len(idx) * (DROP_RATE if dropped else METHODS[m][1]))
         success[rng.choice(idx, k, replace=False)] = True
     tx["status"] = np.where(success, "success", "failed")
