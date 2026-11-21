@@ -22,6 +22,10 @@ class ModelUnavailable(Exception):
     sql = ()  # the SQL the answer would have run, shown with the message
 
 
+class NoQuota(ModelUnavailable):
+    """No key, or every free model rate-limited or down: nothing was answered."""
+
+
 def post(model, prompt, key):
     body = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}]}).encode()
     req = Request(URL, body, {"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
@@ -55,7 +59,7 @@ def complete(prompt, check=accept_any, post=post, cache_dir=CACHE_DIR):
         return saved.read_text()
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
-        raise ModelUnavailable("no OpenRouter key set: add OPENROUTER_API_KEY to Streamlit secrets")
+        raise NoQuota("no OpenRouter key set: add OPENROUTER_API_KEY to Streamlit secrets")
     unusable = False
     for model in MODELS:
         try:
@@ -73,4 +77,4 @@ def complete(prompt, check=accept_any, post=post, cache_dir=CACHE_DIR):
         return text
     if unusable:
         raise ModelUnavailable("the free model returned an unusable reply, try rephrasing")
-    raise ModelUnavailable("free model limit reached, try again in a minute")
+    raise NoQuota("free model limit reached, try again in a minute")

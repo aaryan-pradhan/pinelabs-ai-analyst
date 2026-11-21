@@ -40,7 +40,7 @@ def test_every_model_down_raises_the_free_limit_message(tmp_path):
     calls = []
     post = fake_post({m: rate_limited() for m in llm.MODELS}, calls)
 
-    with pytest.raises(ModelUnavailable, match="free model limit reached, try again in a minute"):
+    with pytest.raises(llm.NoQuota, match="free model limit reached, try again in a minute"):
         complete("p", post=post, cache_dir=tmp_path)
     assert calls == llm.MODELS
 
@@ -58,7 +58,7 @@ def test_no_key_raises_without_calling_a_model(tmp_path, monkeypatch):
     monkeypatch.delenv("OPENROUTER_API_KEY")
     calls = []
 
-    with pytest.raises(ModelUnavailable):
+    with pytest.raises(llm.NoQuota):
         complete("p", post=fake_post({}, calls), cache_dir=tmp_path)
     assert calls == []
 
@@ -82,8 +82,9 @@ def test_unusable_reply_falls_back_and_is_not_saved(tmp_path):
 def test_every_reply_unusable_says_so_not_limit_reached(tmp_path):
     post = fake_post({m: "Sorry, no." for m in llm.MODELS}, [])
 
-    with pytest.raises(ModelUnavailable, match="unusable reply"):
+    with pytest.raises(ModelUnavailable, match="unusable reply") as e:
         complete("p", must_be_json, post, tmp_path)
+    assert not isinstance(e.value, llm.NoQuota)  # the model answered; a quota wait will not help
 
 
 def test_the_model_that_answered_is_known_on_replay(tmp_path):
