@@ -197,18 +197,20 @@ number comes from validated, executed SQL.
 stage named as the narration reaches it: Question, Plan (semantic layer), SQL,
 Validator, DuckDB, Analysis (decomposition, intervals, data checks), Answer. A
 "Numbers" track runs underneath from DuckDB to Answer, and a separate "Words"
-track from the model to Answer, so the split is visible. End on the README's
-limitations section for the last two sentences.
+track from the model to Answer, so the split is visible. For the last three
+sentences, the pipeline fades and the story's three answers appear one by one:
+the Week 6 traffic shift, Coastal Bank, every number checkable. End on the
+title "AI Business Analyst" with the repository link.
 
 **Say:**
 "Here's how it works. Your question goes to a language model, but the model
-never writes a number. It only picks a plan from a semantic layer: a fixed
-list of metrics, like success rate, and the ways you can split them. That
-keeps every definition the same. The plan becomes SQL, and a validator checks
-it before it runs: SELECT only, known tables and columns only, and only what
-your role may see. DuckDB runs it read-only, with a five-second limit. Then the
-analysis: the mix-versus-rate split, confidence intervals, and data-quality
-checks on every answer. Last, the model writes the story, using only the
-computed Facts. The data is synthetic, generated with these stories planted,
-and the login is mocked. The limitations and what comes next are in the
-README."
+never writes a number. It picks a plan from a semantic layer: a fixed list of
+metrics, like success rate, and the ways you can split them. So every
+definition stays the same, every time. The plan becomes SQL, and a validator
+checks it before it runs: SELECT only, known tables and columns only, and only
+what your role may see. DuckDB runs it read-only, with a five-second limit.
+Then the analysis: the mix-versus-rate split, confidence intervals, and
+data-quality checks on every answer. Only then does the model write the story,
+and it may use only the computed Facts. So, back to Monday morning. Before
+noon, you know the Week 6 drop was a traffic shift, Coastal Bank was the real
+problem, and every number behind it can be checked. That's the AI analyst."
