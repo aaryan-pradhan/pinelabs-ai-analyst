@@ -98,3 +98,15 @@ def test_committed_eval_answers_match_the_generated_data(db_path):
     assert generator.expected(db_path) == committed
     assert committed["drop_bank"] == "Coastal Bank"
     assert committed["gap_category"] == "electronics"
+
+
+def test_ensure_rebuilds_a_database_an_older_generator_built(tmp_path):
+    path = tmp_path / "payments.duckdb"
+    generator.ensure(path)
+    built = path.stat().st_mtime_ns
+    generator.ensure(path)
+    assert path.stat().st_mtime_ns == built  # same generator: kept
+
+    path.with_suffix(".stamp").write_text("an older generator.py")  # a deploy that outlived its generator
+    generator.ensure(path)
+    assert path.stat().st_mtime_ns != built

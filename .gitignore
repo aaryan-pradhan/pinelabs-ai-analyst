@@ -5,5 +5,6 @@ __pycache__/
 .venv/
 *.duckdb
 *.duckdb.wal
+*.stamp
 .streamlit/secrets.toml
 .llm_cache/
