@@ -12,7 +12,7 @@ import dq
 from executor import run
 from generator import DB_PATH
 from llm import ModelUnavailable
-from semantic import DIMENSIONS
+from semantic import DIMENSIONS, TABLES
 from validator import validate
 
 
@@ -50,6 +50,7 @@ FILTERABLE = [d for d in DIMENSIONS if d not in ("week", "failure_reason")]  # w
 # since the Source mismatch check covers the whole Week. Other metrics wait in the semantic layer.
 ANSWERED = {"success_rate": (2, FILTERABLE), "settlement_gap": (1, [])}
 LEADS = ["payment_method", "bank", "category"]  # decomposed every time; the best one leads (D24)
+TABLE_LIST = "; ".join(f"{t}({', '.join(cols)})" for t, cols in TABLES.items())
 WEEKS = range(1, 9)  # wk1 = 28 Sep 2026 ... wk8 = 16-22 Nov 2026
 
 
@@ -64,7 +65,12 @@ def plan_prompt(question):
         "filters is optional: {dimension: value} when the question names one Segment, "
         "e.g. payment_method is upi, card, netbanking or wallet.\n"
         f"Metrics: {', '.join(ANSWERED)}\nFilter dimensions (success_rate only): {', '.join(FILTERABLE)}\n"
-        "Only if the question names none of these metrics, reply instead with "
+        "If no metric above fits but these tables can answer it, reply instead with the one DuckDB "
+        'statement the question asks for, e.g. {"sql": "SELECT transactions.status, COUNT(*) AS n '
+        'FROM transactions GROUP BY 1 ORDER BY n DESC"}\n'
+        f"Tables: {TABLE_LIST}. Join merchants and banks to transactions on merchant_id and bank_id; "
+        "write full table names, never table aliases.\n"
+        "Only if the question is too vague for either, reply instead with "
         '{"ask": <one short question back to the user>}.\n'
         f"Question: {question}"
     )
