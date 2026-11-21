@@ -6,7 +6,7 @@ import shutil
 import duckdb
 import pytest
 
-from analyst import ask
+from analyst import AskBack, ask
 from llm import ModelUnavailable
 
 WK6_PLAN = {"metric": "success_rate", "weeks": [5, 6]}
@@ -45,6 +45,7 @@ def test_wk6_drop_is_a_mix_shift(db_path):
         assert "LIMIT 10000" in fact.sql
         assert fact.tables == ["transactions"]
         assert fact.window == "wk5 vs wk6"
+    assert "weeks" not in answer.assumptions  # the question named its Weeks
 
 
 def test_wk7_card_drop_names_the_bank_that_got_worse(db_path):
@@ -235,3 +236,10 @@ def test_edited_window_reruns_for_the_edited_weeks(db_path):
     assert all(fact.window == "wk5 vs wk6" for fact in answer.facts)
     assert answer.decomposition["dimension"] == "payment_method"  # the planted wk6 mix shift
     assert -0.05 < answer.decomposition["total"] < -0.03
+
+
+def test_question_with_no_sensible_default_is_asked_back(db_path):
+    back = {"ask": "Which metric do you mean: Success rate or Settlement gap?"}
+
+    with pytest.raises(AskBack, match="Which metric do you mean"):
+        ask("How are things?", "analyst", fake_llm(back), db_path)

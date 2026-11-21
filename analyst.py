@@ -39,6 +39,10 @@ class Answer:
     assumptions: dict  # defaults chosen for what the question left open, editable by the user
 
 
+class AskBack(Exception):
+    """The question has no sensible default to assume; the message asks the user."""
+
+
 FILTERABLE = [d for d in DIMENSIONS if d not in ("week", "failure_reason")]  # weeks are chosen separately
 # Metrics ask() has an answer shape for: (weeks in the plan, dimensions it may filter on).
 # A Success rate decomposition compares two Weeks; a Settlement gap reads one, unfiltered,
@@ -59,12 +63,16 @@ def plan_prompt(question):
         "filters is optional: {dimension: value} when the question names one Segment, "
         "e.g. payment_method is upi, card, netbanking or wallet.\n"
         f"Metrics: {', '.join(ANSWERED)}\nFilter dimensions (success_rate only): {', '.join(FILTERABLE)}\n"
+        "Only if the question names none of these metrics, reply instead with "
+        '{"ask": <one short question back to the user>}.\n'
         f"Question: {question}"
     )
 
 
 def usable(plan):
     weeks, filters = plan.get("weeks"), plan.get("filters", {})
+    if "ask" in plan:
+        return isinstance(plan["ask"], str)
     if plan.get("metric") not in ANSWERED:
         return False
     n_weeks, dims = ANSWERED[plan["metric"]]
@@ -129,6 +137,8 @@ def ask(question, role, llm, db_path=DB_PATH, weeks=None):
     except ModelUnavailable as e:
         e.sql = [sql for sql, _ in planned_sql(DEFAULT_PLAN)]
         raise
+    if "ask" in plan:
+        raise AskBack(plan["ask"])
     assumptions = {}
     if weeks is not None:
         plan["weeks"] = assumptions["weeks"] = weeks
