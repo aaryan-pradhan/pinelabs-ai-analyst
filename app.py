@@ -6,7 +6,7 @@ import streamlit as st
 
 import generator
 import llm
-from analyst import AskBack, ask
+from analyst import WEEKS, AskBack, ask
 
 
 st.set_page_config(page_title="AI Business Analyst")
@@ -40,7 +40,7 @@ if question:
         weeks = answer.assumptions["weeks"]
         with chips[0].popover("Window: " + " vs ".join(f"wk{w}" for w in weeks)):
             # A comparison is always the chosen Week against the one before it.
-            current = st.selectbox("Week", range(len(weeks), 9), index=weeks[-1] - len(weeks))
+            current = st.selectbox("Week", WEEKS[len(weeks) - 1:], index=weeks[-1] - len(weeks))
             if st.button("Re-run"):
                 st.session_state.weeks = list(range(current - len(weeks) + 1, current + 1))
                 st.rerun()
