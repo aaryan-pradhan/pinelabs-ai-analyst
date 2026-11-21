@@ -1,5 +1,6 @@
 """Seam 1: the analyst, driven with a fake LLM that returns a fixed plan."""
 import json
+import re
 import shutil
 
 import duckdb
@@ -56,7 +57,9 @@ def test_wk7_card_drop_names_the_bank_that_got_worse(db_path):
     coastal = next(s for s in d["segments"] if s["segment"] == "Coastal Bank")  # planted in story (b)
     assert 0.90 < coastal["rate_before"] < 0.94
     assert 0.76 < coastal["rate_after"] < 0.80
-    assert "Coastal Bank" in prompts[1] and "rate change" in prompts[1]
+    computed = prompts[1].split("Computed headline: ")[1].split("\n")[0]
+    assert "rate change within banks" in computed
+    assert re.search(r"Coastal Bank went from 9[12]\.\d% to 7[78]\.\d%", computed)
     assert "Coastal Bank" in {row["segment"] for row in answer.chart}
     for fact in answer.facts:
         assert fact.filters == ["payment_method = card"]
