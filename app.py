@@ -23,12 +23,12 @@ if question:
         answer = ask(question, "analyst", llm.complete)
     except llm.ModelUnavailable as e:
         st.warning(str(e))
-        st.caption("SQL that would have run:")
+        st.caption("SQL for this question:")
         for sql in e.sql:
             st.code(sql, language="sql")
         st.stop()
     st.subheader(answer.headline)
-    st.caption("Headline written by a free model from the computed finding; numbers are in Facts.")
+    st.caption("Headline written by a free model; only the numbers in Facts come from executed SQL.")
 
     d = answer.decomposition
     chart = pd.DataFrame(answer.chart).melt(id_vars="segment", var_name="effect", value_name="pp")
