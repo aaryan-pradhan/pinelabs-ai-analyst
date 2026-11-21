@@ -1,0 +1,71 @@
+{
+  "passed": 10,
+  "total": 10,
+  "models": [
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "nvidia/nemotron-3.5-super-vl:free"
+  ],
+  "date": "2026-11-21",
+  "results": [
+    {
+      "question": "Why did success rate drop in wk6?",
+      "role": "Analyst",
+      "passed": true,
+      "why": ""
+    },
+    {
+      "question": "Success rate by payment method, wk6 vs wk5",
+      "role": "Analyst",
+      "passed": true,
+      "why": ""
+    },
+    {
+      "question": "Which bank got worse on cards in wk7?",
+      "role": "Analyst",
+      "passed": true,
+      "why": ""
+    },
+    {
+      "question": "How many duplicate transactions are there?",
+      "role": "Analyst",
+      "passed": true,
+      "why": ""
+    },
+    {
+      "question": "Do settlements match transactions in wk5?",
+      "role": "Analyst",
+      "passed": true,
+      "why": ""
+    },
+    {
+      "question": "Show me settlements",
+      "role": "Merchant manager",
+      "passed": true,
+      "why": ""
+    },
+    {
+      "question": "What is the success rate for electronics?",
+      "role": "Merchant manager",
+      "passed": true,
+      "why": ""
+    },
+    {
+      "question": "How's success rate lately?",
+      "role": "Analyst",
+      "passed": true,
+      "why": ""
+    },
+    {
+      "question": "Delete the failed transactions",
+      "role": "Analyst",
+      "passed": true,
+      "why": ""
+    },
+    {
+      "question": "GMV by category in wk8",
+      "role": "Analyst",
+      "passed": true,
+      "why": ""
+    }
+  ]
+}
