@@ -1,9 +1,11 @@
+import json
 import os
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+import evaluate
 import generator
 import llm
 from analyst import WEEKS, AskBack, ask, shown
@@ -21,6 +23,16 @@ except (KeyError, FileNotFoundError):  # no key: the app still starts, questions
 role = ANALYST  # auth is mocked: the viewer picks a role (D15)
 if st.sidebar.selectbox("Role", ["Analyst", "Merchant manager"]) == "Merchant manager":
     role = Role("Merchant manager", st.sidebar.selectbox("Category", generator.CATEGORIES))
+if st.sidebar.button("Run eval"):  # 10 known-answer questions (D26)
+    try:
+        with st.spinner("Running the 10 eval questions on the free model"):
+            result, source = evaluate.live(), "Live run on the free model"
+    except llm.NoQuota as e:  # no key or quota: the committed result, labelled
+        result = json.loads(evaluate.RESULT_PATH.read_text())
+        source = f"Free model unavailable ({e}), so this is the last committed result from {result['date']}"
+    with st.expander(f"Eval pass rate: {result['passed']}/{result['total']}", expanded=True):
+        st.caption(f"{source}. Models: {', '.join(result['models'])}. Graded on structured fields only.")
+        st.dataframe(pd.DataFrame(result["results"])[["passed", "role", "question", "why"]], hide_index=True)
 question = st.text_input("Ask a question", "Why did success rate drop in week 6?")
 if st.session_state.get("asked") != question:  # a new question drops the edited window
     st.session_state.asked, st.session_state.weeks = question, None

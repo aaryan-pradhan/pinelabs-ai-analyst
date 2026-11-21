@@ -137,7 +137,8 @@ def run(complete, db_path=DB_PATH, expected=None):
     return results
 
 
-def main():
+def live():
+    """The eval on the live free model, with the models that answered. Raises llm.NoQuota."""
     prompts = []
 
     def logged(prompt, check):
@@ -145,13 +146,17 @@ def main():
         return llm.complete(prompt, check)
 
     results = run(logged)
-    models = sorted({m for p in prompts if (m := llm.answered_by(p))})
-    passed = sum(r["passed"] for r in results)
-    for r in results:
+    return {"passed": sum(r["passed"] for r in results), "total": len(results),
+            "models": sorted({m for p in prompts if (m := llm.answered_by(p))}),
+            "date": str(date.today()), "results": results}
+
+
+def main():
+    result = live()
+    for r in result["results"]:
         print(f"{'PASS' if r['passed'] else 'FAIL'}  [{r['role']}] {r['question']}" + (f"\n      {r['why']}" * bool(r["why"])))
-    print(f"\n{passed}/{len(results)} passed on {', '.join(models)}")
-    RESULT_PATH.write_text(json.dumps({"passed": passed, "total": len(results), "models": models,
-                                       "date": str(date.today()), "results": results}, indent=2) + "\n")
+    print(f"\n{result['passed']}/{result['total']} passed on {', '.join(result['models'])}")
+    RESULT_PATH.write_text(json.dumps(result, indent=2) + "\n")
 
 
 if __name__ == "__main__":
