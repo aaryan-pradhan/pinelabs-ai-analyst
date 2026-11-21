@@ -1,19 +1,19 @@
-# D36: a monospace document on white paper, black ink, no colour accent.
+# D36: the day palette of the garden room; app.py's CSS swaps to night for a Merchant manager.
 [client]
 toolbarMode = "minimal"
 
 [theme]
 base = "light"
-primaryColor = "#111111"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f4f4f4"
-textColor = "#111111"
-linkColor = "#111111"
-borderColor = "#d4d4d4"
-dataframeBorderColor = "#e4e4e4"
-dataframeHeaderBackgroundColor = "#f4f4f4"
-codeBackgroundColor = "#f4f4f4"
-codeTextColor = "#111111"
+primaryColor = "#1d2f2a"
+backgroundColor = "#fdfcf7"
+secondaryBackgroundColor = "#f1eee4"
+textColor = "#1d2f2a"
+linkColor = "#1d2f2a"
+borderColor = "#d9d1bd"
+dataframeBorderColor = "#d9d1bd"
+dataframeHeaderBackgroundColor = "#f1eee4"
+codeBackgroundColor = "#f1eee4"
+codeTextColor = "#1d2f2a"
 font = "Source Code Pro:https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500;600&display=swap"
 codeFont = "Source Code Pro:https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500;600&display=swap"
 headingFontWeights = [500, 500, 500, 500, 500, 500]
@@ -23,6 +23,5 @@ buttonRadius = "0px"
 showWidgetBorder = true
 
 [theme.sidebar]
-backgroundColor = "#fafafa"
-secondaryBackgroundColor = "#f0f0f0"
-showSidebarBorder = true
+backgroundColor = "#ece5d4"
+secondaryBackgroundColor = "#f1eee4"
