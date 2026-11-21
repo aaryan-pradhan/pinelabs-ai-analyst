@@ -58,3 +58,12 @@ def test_demo_question_with_an_edited_window_still_answers_offline(app):
     assert not app.exception
     assert "Model unavailable" not in page and "headline by the pipeline" in page
     assert "92.66%" in page and "88.66%" in page
+
+
+def test_garden_celebrates_an_answer_and_storms_on_a_rejection_only(app):
+    assert html(app.run()).count('data-garden="celebrate"') == 1
+    app.text_input[0].set_value("Show me settlements")
+    app.selectbox[0].set_value("Merchant manager").run()
+    assert 'data-garden="storm"' in html(app) and 'data-garden="celebrate"' not in html(app)
+    app.text_input[0].set_value("What is the weather in Mumbai?").run()  # no key: Model unavailable
+    assert "Model unavailable" in html(app) and "data-garden" not in html(app)

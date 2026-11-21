@@ -100,16 +100,18 @@ def row(left, right=""):
 BLANK, RULE = ln(), ln(f'<span class="rule">{"=" * COL}</span>')
 
 
-def doc(*parts, cls=""):
-    st.html(f'<div class="doc {cls}">{"".join(parts)}</div>')
+def doc(*parts, cls="", garden=""):
+    """`garden` is the mood the garden plays for this block: celebrate or storm."""
+    mood = f' data-garden="{garden}"' if garden else ""
+    st.html(f'<div class="doc {cls}"{mood}>{"".join(parts)}</div>')
 
 
 def label(text):
     return f'<span class="inv">{escape(text)}</span>'
 
 
-def notice(tag, text):
-    doc(BLANK, ln(label(tag)), BLANK, lines(text), BLANK)
+def notice(tag, text, garden=""):
+    doc(BLANK, ln(label(tag)), BLANK, lines(text), BLANK, garden=garden)
 
 
 def bar(value, top, on, width):
@@ -208,7 +210,7 @@ if question:
                "replays a cached model reply. Numbers, SQL and charts still come from running the pipeline; any "
                "cached headline, Hypotheses and Recommendations were written with Claude Code during development.")
     if isinstance(answer, Rejected):
-        notice("Rejected", str(answer))
+        notice("Rejected", str(answer), garden="storm")
         for sql in answer.sql:
             st.code(sql, language="sql")
         st.stop()
@@ -225,7 +227,7 @@ if question:
     if not answer.narrated:
         writer = "the pipeline, as the free model was unavailable"
     doc(BLANK, RULE, BLANK, row(label("Answer"), f"headline by {writer}"),
-        BLANK, lines(answer.headline), BLANK)
+        BLANK, lines(answer.headline), BLANK, garden="celebrate")
     chips = st.container(horizontal=True, gap="small")
     if "weeks" in answer.assumptions:
         weeks = answer.assumptions["weeks"]

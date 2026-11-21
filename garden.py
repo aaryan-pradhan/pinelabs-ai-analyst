@@ -379,11 +379,11 @@ JS = r"""
   let seen = '';
   setInterval(() => {  // react to the app: spinner, a new answer, a rejection
     g.classList.toggle('thinking', !!document.querySelector('[data-testid="stSpinner"]'));
-    const label = [...document.querySelectorAll('.inv')].map(e => e.textContent.trim()).find(t => /^(answer|rejected|question back)$/i.test(t)) || '';
-    const head = label + (document.querySelector('.inv')?.closest('.doc')?.textContent.length || 0);
-    if (label && head !== seen) {
+    const block = document.querySelector('[data-garden]');  // app.py marks an Answer or a Rejected notice
+    const head = block ? block.dataset.garden + block.textContent : '';
+    if (block && head !== seen) {
       seen = head;
-      const cls = /rejected/i.test(label) ? 'storm' : 'celebrate';
+      const cls = block.dataset.garden;
       g.classList.add(cls);
       if (cls === 'celebrate') { const r = g.getBoundingClientRect(); for (let i = 0; i < 6; i++) setTimeout(() => burst(r.left + r.width * (i % 2 ? .85 : .15), r.top + r.height * .3, 12, 140, 120), i * 180); }
       setTimeout(() => g.classList.remove(cls), cls === 'storm' ? 4000 : 1800);
