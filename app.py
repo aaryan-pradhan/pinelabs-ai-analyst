@@ -7,6 +7,7 @@ import streamlit as st
 import generator
 import llm
 from analyst import WEEKS, AskBack, ask
+from validator import ANALYST, Rejected, Role
 
 
 st.set_page_config(page_title="AI Business Analyst")
@@ -17,12 +18,18 @@ try:
 except (KeyError, FileNotFoundError):  # no key: the app still starts, questions show why
     pass
 
+role = ANALYST  # auth is mocked: the viewer picks a role (D15)
+if st.sidebar.selectbox("Role", ["Analyst", "Merchant manager"]) == "Merchant manager":
+    role = Role("Merchant manager", st.sidebar.selectbox("Category", generator.CATEGORIES))
 question = st.text_input("Ask a question", "Why did success rate drop in week 6?")
 if st.session_state.get("asked") != question:  # a new question drops the edited window
     st.session_state.asked, st.session_state.weeks = question, None
 if question:
     try:
-        answer = ask(question, "analyst", llm.complete, weeks=st.session_state.weeks)
+        answer = ask(question, role, llm.complete, weeks=st.session_state.weeks)
+    except Rejected as e:
+        st.error(str(e))
+        st.stop()
     except AskBack as e:
         st.info(str(e))
         st.stop()
@@ -35,17 +42,20 @@ if question:
     st.subheader(answer.headline)
     st.caption("Headline written by a free model; only the numbers in Facts come from executed SQL.")
 
-    chips = st.columns(len(answer.assumptions) or 1)
+    chips = dict(zip(answer.assumptions, st.columns(len(answer.assumptions) or 1)))
     if "weeks" in answer.assumptions:
         weeks = answer.assumptions["weeks"]
-        with chips[0].popover("Window: " + " vs ".join(f"wk{w}" for w in weeks)):
+        with chips["weeks"].popover("Window: " + " vs ".join(f"wk{w}" for w in weeks)):
             # A comparison is always the chosen Week against the one before it.
             current = st.selectbox("Week", WEEKS[len(weeks) - 1:], index=weeks[-1] - len(weeks))
             if st.button("Re-run"):
                 st.session_state.weeks = list(range(current - len(weeks) + 1, current + 1))
                 st.rerun()
+    if "scope" in answer.assumptions:
+        with chips["scope"].popover(f"Scoped to: {answer.assumptions['scope']}"):
+            st.caption(f"A {role.name} sees only their category.")
     if "denominator" in answer.assumptions:
-        with chips[-1].popover(f"Denominator: {answer.assumptions['denominator']}"):
+        with chips["denominator"].popover(f"Denominator: {answer.assumptions['denominator']}"):
             st.caption("The only Success rate denominator the semantic layer defines (D19).")
 
     d = answer.decomposition  # empty for a Settlement gap answer
