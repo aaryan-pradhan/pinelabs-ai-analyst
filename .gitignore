@@ -23,3 +23,4 @@ videos/.cache/
 videos/*/*
 !videos/*/script.md
 videos/__pycache__/
+video/models/

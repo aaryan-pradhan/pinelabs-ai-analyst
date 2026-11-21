@@ -73,14 +73,37 @@ def source(log):
     return at, report
 
 
+RNN = HERE / "models" / "sh.rnnn"  # curl -L -o models/sh.rnnn https://raw.githubusercontent.com/richardpl/arnndn-models/master/sh.rnnn
+LOUD = "I=-16:TP=-1.5:LRA=11"
+
+
+def voice_chain(c):
+    """Clean one take: declip, cut rumble and room noise, take the mud out, add presence, tame s, even it out."""
+    return (("adeclip," if c == 2 else "") + f"highpass=f=80,arnndn=m={RNN},afftdn=nf=-30,"
+            "equalizer=f=250:t=q:w=1:g=-3,equalizer=f=4500:t=q:w=1.2:g=3,deesser=i=0.3,"
+            "acompressor=threshold=-24dB:ratio=3:attack=5:release=80:makeup=2")
+
+
+def loudness(wav, a, b, chain):
+    """First loudnorm pass: the take's measured loudness, so the second pass is one fixed gain
+    (dynamic loudnorm lifts the room noise between words)."""
+    err = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(wav), "-af",
+                          f"atrim={a:.3f}:{b:.3f},{chain},loudnorm={LOUD}:print_format=json", "-f", "null", "-"],
+                         capture_output=True, text=True, check=True).stderr
+    m = json.loads(err[err.rindex("{"):err.rindex("}") + 1])
+    return (f"measured_I={m['input_i']}:measured_TP={m['input_tp']}:measured_LRA={m['input_lra']}:"
+            f"measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true")
+
+
 def audio(tl):
     args, chain = [], []
     for ch in tl:
         c, (a, b) = ch["c"], ch["trim"]
-        args += ["-i", str(HERE / "voice" / f"ch{c}.wav")]
-        f = (f"[{c}:a]atrim={a:.3f}:{b:.3f},asetpts=PTS-STARTPTS,"
-             + (f"adelay={round(ch['pre'] * 1000)}:all=1," if ch["pre"] else "") + "highpass=f=80,afftdn=nf=-25,"
-             + ("adeclip," if c == 2 else "") + "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000,"
+        wav = HERE / "voice" / f"ch{c}.wav"
+        args += ["-i", str(wav)]
+        clean = voice_chain(c)
+        f = (f"[{c}:a]atrim={a:.3f}:{b:.3f},asetpts=PTS-STARTPTS,{clean},loudnorm={LOUD}:{loudness(wav, a, b, clean)},"
+             "aresample=48000," + (f"adelay={round(ch['pre'] * 1000)}:all=1," if ch["pre"] else "")
              + f"apad,atrim=end_sample={round(ch['dur'] * 48000)}[a{c}]")  # sample-exact, so chapters never drift
         chain.append(f)
     chain.append("".join(f"[a{ch['c']}]" for ch in tl) + f"concat=n={len(tl)}:v=0:a=1[out]")
