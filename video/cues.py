@@ -20,10 +20,13 @@ def option(text):
 
 HEADLINE = {"zoom": 1.7}
 CUES = {
-    0: [(0.2, "cam", {"sel": "#context", "zoom": 1.22, "pad": 60, "dur": 9000}),
-        ("success rate fell", "js", "q.classList.add('on')"),
-        ("pine labs asked", "cam", {"sel": "#goal", "zoom": 1.75, "pad": 40, "dur": 1500}),
-        (("pine labs asked", 0.9), "js", "g.classList.add('on')"),
+    0: [(("its monday", -0.1), "js", "on('monday')"),  # each card line appears on the words that say it
+        ("you run payments", "js", "on('you')"),
+        ("your dashboard says", "js", "on('dash')"),
+        ("fell four points", "js", "on('fell')"),
+        ("your ceo", "js", "on('ceo')"),
+        ("pine labs asked", "js", "on('goal')"),
+        (("pine labs asked", 1.0), "js", "on('g')"),
         ("here is", "split")],  # the card ends; the app's opening page begins
     1: [("so we ask", "ask", "Why did success rate drop in week 6?", "week 6"),
         ("the headline", "cam", {"a": "SUCCESS RATE FELL 4.0", "n": 2, **HEADLINE}),
@@ -67,7 +70,8 @@ CUES = {
         (("then someone", 1.3), "click", option("Analyst")),
         (("delete the failed", -1.2), "ask", "Delete the failed transactions", "transactions"),
         ("the analyst refuses", "cam", {"a": "REJECTED", "b": "DELETE FROM", "zoom": 1.6})],
-    8: [("last question", "ask", "How many duplicate transactions are there?", "messy"),
+    # Its answer holds a table, which sizes itself when drawn: ask zoomed out or it draws too wide.
+    8: [("last question", "ask", "How many duplicate transactions are there?", "messy", {"full": True, "top": True}),
         ("this data has", "cam", {"a": "THERE ARE 2,252 DUPLICATES", "zoom": 2.0, "pad": 90}),
         ("and it is tested", "cam", {"full": True, "top": True, "dur": 900}),
         (("and it is tested", 0.5), "click", "[data-testid=stSidebar] button:has-text('Run eval')"),
@@ -121,8 +125,8 @@ def timeline():
             phrase, off = when if isinstance(when, tuple) else (when, 0.0)
             t = off if isinstance(phrase, (int, float)) else seconds(c, phrase) - a + off
             if action == "ask":  # type until the spoken question ends
-                text, until = args
-                args = [text, seconds(c, until, after=t + a, end=True) - a - t]
+                text, until, *view = args
+                args = [text, seconds(c, until, after=t + a, end=True) - a - t, *view]
             resolved.append((round(t - LEADS.get(action, 0.0), 3), action, args))
         out.append({"c": c, "trim": (a, b), "start": start, "dur": dur, "cues": sorted(resolved, key=lambda r: r[0])})
         start += dur
