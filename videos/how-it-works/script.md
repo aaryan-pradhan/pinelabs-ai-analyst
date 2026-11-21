@@ -7,7 +7,7 @@ until: 58.280
 ---
 ## How it works
 
-<!-- beat: pipeline stages="Your question;Language model;Plan from the semantic layer;SQL;Validator;DuckDB;Analysis;Language model writes the story" notes="in plain words|picks a plan, never a number|fixed metrics, fixed ways to split them||SELECT only, known tables and columns, your role's rows only|read-only, 5-second limit|mix versus rate, confidence intervals, data-quality checks|computed facts only" cols="white,gold,blue,blue,blue,teal,blue,gold" order="n0,1+n1,2+n2,*2,3+4+n4,5+n5,6+n6,7+n7,all" -->
+<!-- beat: pipeline stages="Your question;Language model;Plan from the semantic layer;SQL;Validator;DuckDB;Analysis;Language model writes the story" notes="in plain words|picks a plan, never a number|fixed metrics, fixed ways to split them||SELECT only, known tables and columns, your role's rows only|read-only, 5-second limit|mix versus rate, confidence intervals, data-quality checks|computed facts only" cols="white,gold,blue,blue,blue,green,blue,gold" order="n0,1+n1,2+n2,*2,3+4+n4,5+n5,6+n6,7+n7,all" -->
 
 Here is how it works.
 

@@ -1,5 +1,5 @@
 ---
-colors: {UPI: blue, cards: gold, wallets: teal, net banking: red}
+colors: {UPI: blue, cards: gold, wallets: green, net banking: pink}
 slug: mix-vs-rate
 voice: ../../video/words/ch2.json
 offset: 3.500
