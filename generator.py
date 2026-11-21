@@ -5,7 +5,8 @@ festive-sale merchant pushes extra traffic to netbanking and wallet, so the
 overall Success rate falls while every payment method stays flat. Planted
 story (b): in wk7 Coastal Bank's card Success rate falls from ~92% to ~78%.
 Planted story (c): ~1.5% exact-copy Duplicates and nulls in bank_id, amount and
-failure_reason.
+failure_reason. Planted story (d): in wk5 electronics merchants' Settlements are
+3% below their successful Attempt value; everywhere else they match exactly.
 """
 from pathlib import Path
 
@@ -28,6 +29,7 @@ METHODS = {
 }
 FESTIVE_METHODS = {"netbanking": 0.55, "wallet": 0.45}
 DROP_BANK, DROP_RATE = 3, 0.78  # story (b): Coastal Bank's card rate in wk7
+SHORT_CATEGORY, SHORT_WEEK, SHORT_BY = "electronics", 5, 0.03  # story (d): wk5 Settlements 3% short
 
 CATEGORIES = ["grocery", "electronics", "fashion", "travel", "food_delivery", "fuel"]
 CITIES = ["Mumbai", "Delhi", "Bengaluru", "Chennai", "Hyderabad",
@@ -115,12 +117,16 @@ def build(path, seed=42):
     con = duckdb.connect(str(path))
     for name, df in [("transactions", with_dups), ("merchants", merchants), ("banks", banks)]:
         con.execute(f"CREATE TABLE {name} AS SELECT * FROM df")
-    con.execute("""
+    # Story (d): keyed by transaction date, gross, no fees; one category short in wk5.
+    con.execute(f"""
         CREATE TABLE settlements AS
         SELECT merchant_id, CAST(ts AS DATE) AS date,
-               SUM(amount) AS settled_amount, COUNT(*) AS settled_count
-        FROM tx WHERE status = 'success'
-        GROUP BY 1, 2 ORDER BY 1, 2
+               SUM(amount) * CASE WHEN category = '{SHORT_CATEGORY}'
+                                   AND date_diff('day', DATE '{START.date()}', CAST(ts AS DATE)) // 7 + 1 = {SHORT_WEEK}
+                                  THEN {1 - SHORT_BY} ELSE 1 END AS settled_amount,
+               COUNT(*) AS settled_count
+        FROM tx JOIN merchants USING (merchant_id) WHERE status = 'success'
+        GROUP BY 1, 2, category ORDER BY 1, 2
     """)
     con.close()
 

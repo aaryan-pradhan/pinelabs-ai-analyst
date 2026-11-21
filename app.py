@@ -30,15 +30,15 @@ if question:
     st.subheader(answer.headline)
     st.caption("Headline written by a free model; only the numbers in Facts come from executed SQL.")
 
-    d = answer.decomposition
-    chart = pd.DataFrame(answer.chart).melt(id_vars="segment", var_name="effect", value_name="pp")
-    chart["pp"] *= 100
-    st.plotly_chart(px.bar(
-        chart, x="segment", y="pp", color="effect", barmode="group",
-        title=f"Mix vs rate effect by {d['dimension'].replace('_', ' ')} "
-              f"(total {d['total'] * 100:+.2f}pp = mix {d['mix'] * 100:+.2f}pp "
-              f"+ rate {d['rate'] * 100:+.2f}pp)",
-    ))
+    d = answer.decomposition  # empty for a Settlement gap answer
+    unit = "pp" if d else "%"
+    chart = pd.DataFrame(answer.chart).melt(id_vars="segment", var_name="effect", value_name=unit)
+    chart[unit] *= 100
+    title = (f"Mix vs rate effect by {d['dimension'].replace('_', ' ')} "
+             f"(total {d['total'] * 100:+.2f}pp = mix {d['mix'] * 100:+.2f}pp "
+             f"+ rate {d['rate'] * 100:+.2f}pp)" if d
+             else "Settlement gap by category (% of successful Attempt value)")
+    st.plotly_chart(px.bar(chart, x="segment", y=unit, color="effect", barmode="group", title=title))
 
     st.markdown("### Facts")
     for fact in answer.facts:

@@ -1,5 +1,5 @@
 """Compile a query spec into SQL deterministically. The model never writes it."""
-from semantic import ATTEMPTS, DIMENSIONS, JOINS, METRICS
+from semantic import ATTEMPTS, DIMENSIONS, JOINS, METRICS, SETTLED, SETTLED_METRICS
 
 
 def compile_sql(metrics, dimensions, weeks, filters={}):
@@ -13,6 +13,7 @@ def compile_sql(metrics, dimensions, weeks, filters={}):
     # LEFT JOIN keeps Attempts with a null key, so Segment totals still add up.
     joins = "".join(f" LEFT JOIN {t} ON {t}.{k} = transactions.{k}"
                     for t, k in JOINS.items() if f"{t}." in " ".join(select) + where)
-    return (f"SELECT {', '.join(select)} FROM {ATTEMPTS}{joins}"
+    source = SETTLED if SETTLED_METRICS & set(metrics) else ATTEMPTS
+    return (f"SELECT {', '.join(select)} FROM {source}{joins}"
             f" WHERE {DIMENSIONS['week']} IN ({weeks_sql}){where}"
             f" GROUP BY {groups} ORDER BY {groups}")

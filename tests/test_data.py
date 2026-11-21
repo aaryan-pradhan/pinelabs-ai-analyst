@@ -1,5 +1,6 @@
 """Seam 2: the generated database, checked with plain SQL."""
 import duckdb
+import pytest
 
 import generator
 
@@ -54,6 +55,29 @@ def test_story_c_duplicates_and_nulls(con):
     assert 0.01 < amount < 0.02
     assert 0.02 < reason < 0.04
     assert success_reason == 0
+
+
+def test_story_d_one_category_settles_3pct_short_in_wk5(con):
+    gaps = con.execute(f"""
+        SELECT category, wk, SUM(settled_amount) / SUM(amount) - 1
+        FROM (SELECT merchant_id, CAST(ts AS DATE) AS date, {WEEK} AS wk, SUM(amount) AS amount
+              FROM (SELECT DISTINCT * FROM transactions) WHERE status = 'success' GROUP BY 1, 2, 3)
+        JOIN settlements USING (merchant_id, date) JOIN merchants USING (merchant_id)
+        GROUP BY 1, 2
+    """).fetchall()
+    short = [(cat, wk, gap) for cat, wk, gap in gaps if abs(gap) > 1e-9]
+    assert len(short) == 1
+    _, wk, gap = short[0]
+    assert wk == 5
+    assert gap == pytest.approx(-0.03, abs=1e-9)
+    assert len(gaps) == 6 * 8  # every category settles every Week
+    unmatched = con.execute("""
+        SELECT COUNT(*) FROM (SELECT DISTINCT merchant_id, CAST(ts AS DATE) AS date
+                              FROM transactions WHERE status = 'success') AS a
+        FULL JOIN settlements AS s USING (merchant_id, date)
+        WHERE a.merchant_id IS NULL OR s.merchant_id IS NULL
+    """).fetchone()[0]
+    assert unmatched == 0  # one Settlement per merchant per transaction date, no strays
 
 
 def test_same_seed_reproduces_identical_data(db_path, tmp_path):

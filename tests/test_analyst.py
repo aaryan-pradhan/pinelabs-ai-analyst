@@ -90,6 +90,24 @@ def test_model_narrates_but_facts_come_only_from_executed_sql(db_path, con):
             assert fact.value in (rate[6] - rate[5]).to_numpy()
 
 
+def test_wk5_settlements_fall_short_for_one_category(db_path):
+    prompts = []
+    plan = {"metric": "settlement_gap", "weeks": [5]}
+    answer = ask("Do settlements match transactions in week 5?", "analyst", fake_llm(plan, prompts), db_path)
+
+    gaps = {row["segment"]: row["gap"] for row in answer.chart}
+    assert len(gaps) == 6  # every category
+    assert [c for c, gap in gaps.items() if abs(gap) > 0.005] == ["electronics"]  # planted in story (d)
+    assert gaps["electronics"] == pytest.approx(-0.03, abs=1e-9)
+    computed = prompts[1].split("Computed headline: ")[1].split("\n")[0]
+    assert "electronics" in computed and "3.0%" in computed
+    assert answer.dq["mismatch"]
+    assert any("Source mismatch" in line for line in answer.dq["caveats"])
+    for fact in answer.facts:
+        assert "settlements" in fact.tables
+        assert fact.window == "wk5"
+
+
 WEEK = "CAST(FLOOR(date_diff('day', DATE '2026-09-28', CAST(ts AS DATE)) / 7) AS INTEGER) + 1"
 
 

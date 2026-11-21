@@ -1,5 +1,6 @@
 """The semantic layer: the only tables, columns, joins, metrics and dimensions
-a plan may use. Metric and dimension expressions are SQL over `transactions`."""
+a plan may use. Metric and dimension expressions are SQL over `transactions`
+(ATTEMPTS, or SETTLED for the settlement metrics)."""
 
 TABLES = {
     "transactions": ["txn_id", "ts", "merchant_id", "bank_id", "payment_method",
@@ -13,6 +14,16 @@ TABLES = {
 # ponytail: Duplicates are exact copies, so any copy is the first; order by an
 # ingest column here if copies can ever differ.
 ATTEMPTS = "(SELECT DISTINCT ON (txn_id) * FROM transactions) AS transactions"
+
+# Settlements vs Attempts, compared only after both are aggregated by merchant and
+# transaction date (D22): `amount` is that day's successful Attempt value. Aliased
+# `transactions` so the same joins and Week apply. Settlement metrics read from this.
+SETTLED = ("(SELECT COALESCE(a.merchant_id, s.merchant_id) AS merchant_id, COALESCE(a.ts, s.date) AS ts,"
+           " a.amount, s.settled_amount FROM"
+           f" (SELECT merchant_id, CAST(ts AS DATE) AS ts, SUM(amount) AS amount FROM {ATTEMPTS}"
+           " WHERE status = 'success' GROUP BY 1, 2) AS a"
+           " FULL JOIN settlements AS s ON s.merchant_id = a.merchant_id AND s.date = a.ts) AS transactions")
+SETTLED_METRICS = {"settled_amount", "settlement_gap"}
 
 # Allowed joins from transactions: table -> key column.
 JOINS = {"merchants": "merchant_id", "banks": "bank_id"}
@@ -30,6 +41,9 @@ METRICS = {
     # A reason's share of the Week's failed Attempts; needs the week dimension.
     "failure_share": "COUNT(*) FILTER (WHERE status = 'failed')"
                      f" / SUM(COUNT(*) FILTER (WHERE status = 'failed')) OVER (PARTITION BY {WEEK})",
+    "settled_amount": "SUM(settled_amount)",
+    # Settlements over successful Attempt value, minus 1: negative means settled short.
+    "settlement_gap": "SUM(settled_amount) / SUM(amount) - 1",
 }
 
 DIMENSIONS = {
