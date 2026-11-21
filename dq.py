@@ -1,11 +1,14 @@
 """Data-quality checks for one answer, scoped to its window and columns (D23)."""
+import pandas as pd
 import sqlglot
 from sqlglot import exp
 
 from executor import run
+from generator import START
 from semantic import ATTEMPTS, DIMENSIONS
 
 NULL_LIMIT = 0.01  # caveat above this null rate
+GAP_SHARE = 0.5  # a day below this share of the usual (median) daily Attempts
 MIN_ATTEMPTS = 200  # a Segment below this in any Week is low-confidence
 
 # Nullable key column: (rows it is measured on, what the answer does with a null).
@@ -15,7 +18,7 @@ NULLABLE = {
 
 
 def check(db_path, weeks, sqls, segments):
-    """{"duplicates", "nulls", "low_confidence", "caveats", "confidence"} for the
+    """{"duplicates", "nulls", "gaps", "low_confidence", "caveats", "confidence"} for the
     Attempts in `weeks`, checking only the nullable columns `sqls` use.
     `segments` is {week: {Segment: (attempts, rate)}}."""
     window = f"{DIMENSIONS['week']} IN ({', '.join(str(int(w)) for w in weeks)})"
@@ -36,6 +39,14 @@ def check(db_path, weeks, sqls, segments):
         if rate > NULL_LIMIT:
             _, rows_label, effect = NULLABLE[c]
             caveats.append(f"`{c}` is missing on {rate:.1%} of {rows_label}; they are {effect}.")
+    daily = run(f"SELECT CAST(ts AS DATE) AS day, COUNT(*) AS n FROM {ATTEMPTS} GROUP BY 1", db_path)
+    counts = dict(zip(pd.to_datetime(daily["day"]).dt.date, daily["n"]))
+    days = [(START + pd.Timedelta(days=7 * (w - 1) + i)).date() for w in weeks for i in range(7)]
+    gaps = [d for d in days if counts.get(d, 0) < GAP_SHARE * daily["n"].median()]
+    if gaps:
+        caveats.append(f"Coverage gap: under {GAP_SHARE:.0%} of the usual daily Attempts on "
+                       f"{', '.join(map(str, gaps))}.")
+
     low = sorted({f"{seg} in wk{w} ({a:,})" for w, segs in segments.items()
                   for seg, (a, _) in segs.items() if a < MIN_ATTEMPTS})
     if low:
@@ -45,5 +56,5 @@ def check(db_path, weeks, sqls, segments):
         confidence = "Medium: read the Caveats before acting."
     else:
         confidence = "High: no data-quality issues beyond the excluded Duplicates."
-    return {"duplicates": dupes, "nulls": nulls, "low_confidence": low,
+    return {"duplicates": dupes, "nulls": nulls, "gaps": gaps, "low_confidence": low,
             "caveats": caveats, "confidence": confidence}

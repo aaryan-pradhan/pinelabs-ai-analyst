@@ -118,6 +118,15 @@ def test_segment_under_200_attempts_is_low_confidence(db_path, tmp_path):
     assert clean.dq["confidence"].startswith("High")
 
 
+def test_missing_day_is_a_coverage_gap(db_path, tmp_path):
+    gap = edited_copy(db_path, tmp_path, "DELETE FROM transactions WHERE CAST(ts AS DATE) = DATE '2026-10-29'")
+    answer = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), gap)
+
+    assert any("2026-10-29" in line for line in answer.dq["caveats"])
+    clean = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), db_path)
+    assert not any("coverage" in line.lower() for line in clean.dq["caveats"])
+
+
 def down(prompt, check):
     raise ModelUnavailable("free model limit reached, try again in a minute")
 
