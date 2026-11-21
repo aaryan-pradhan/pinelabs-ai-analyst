@@ -323,3 +323,16 @@ def test_ad_hoc_sql_runs_with_the_missing_limit_added(db_path, con):
     assert answer.result["sql"] == "SELECT txn_id FROM transactions LIMIT 10000"
     assert answer.result["tables"] == ["transactions"]
     assert len(answer.result["rows"]) == 10000
+
+
+@pytest.mark.parametrize("join", [
+    "FROM transactions, merchants",
+    "FROM transactions CROSS JOIN merchants",
+    "FROM transactions JOIN merchants ON 1 = 1",
+    "FROM transactions JOIN merchants ON merchants.merchant_id = transactions.merchant_id OR 1 = 1",
+    "FROM transactions JOIN merchants ON merchants.merchant_id = merchants.merchant_id",
+])
+def test_join_without_a_key_is_rejected(join, db_path):
+    with pytest.raises(Rejected, match="Join without a key"):
+        ask("Count transactions per merchant name", ANALYST, ad_hoc(f"SELECT name, COUNT(*) {join} GROUP BY name"),
+            db_path)

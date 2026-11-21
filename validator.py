@@ -43,6 +43,10 @@ def validate(sql, role=ANALYST):
     unknown = sorted({c.name for c in tree.find_all(exp.Column)} - allowed)
     if unknown:
         raise Rejected(f"Column not in the semantic layer: {', '.join(unknown)}.")
+    for join in tree.find_all(exp.Join):
+        if not keyed(join):
+            raise Rejected(f"Join without a key: {join.sql(dialect='duckdb')}. Join on a column both tables "
+                           "share, e.g. merchants.merchant_id = transactions.merchant_id.")
 
     if role.category is not None:
         tree = scoped(tree, tables, role)
@@ -50,6 +54,18 @@ def validate(sql, role=ANALYST):
     if not tree.args.get("limit"):
         tree = tree.limit(ROW_LIMIT)
     return tree.sql(dialect="duckdb"), tables
+
+
+def keyed(join):
+    """USING, or an ON with no OR that equates two tables' same-named columns."""
+    if join.args.get("using"):
+        return True
+    on = join.args.get("on")
+    if on is None or on.find(exp.Or):
+        return False
+    return any(isinstance(eq, exp.EQ) and isinstance(eq.this, exp.Column) and isinstance(eq.expression, exp.Column)
+               and eq.this.name == eq.expression.name and eq.this.table != eq.expression.table
+               for eq in (on.flatten() if isinstance(on, exp.And) else [on]))
 
 
 def scoped(tree, tables, role):
