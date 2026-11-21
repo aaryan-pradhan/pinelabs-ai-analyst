@@ -124,9 +124,9 @@ def leads(plan):
     return [d for d in LEADS if d not in plan["filters"]]
 
 
-def planned_sql(plan):
+def planned_sql(plan, role):
     """(sql, tables) for the overall query, then one per-Segment query per lead dimension."""
-    return [validate(compile_sql(["attempts", "success_rate"], dims, plan["weeks"], plan["filters"]))
+    return [validate(compile_sql(["attempts", "success_rate"], dims, plan["weeks"], plan["filters"]), role)
             for dims in [["week"]] + [["week", d] for d in leads(plan)]]
 
 
@@ -135,7 +135,7 @@ def ask(question, role, llm, db_path=DB_PATH, weeks=None):
     try:
         plan = reply(llm, plan_prompt(question), usable)
     except ModelUnavailable as e:
-        e.sql = [sql for sql, _ in planned_sql(DEFAULT_PLAN)]
+        e.sql = [sql for sql, _ in planned_sql(DEFAULT_PLAN, role)]
         raise
     if "ask" in plan:
         raise AskBack(plan["ask"])
@@ -148,14 +148,17 @@ def ask(question, role, llm, db_path=DB_PATH, weeks=None):
         plan["weeks"] = assumptions["weeks"] = DEFAULT_PLAN["weeks"][-ANSWERED[plan["metric"]][0]:]
     weeks = plan["weeks"]
     if plan["metric"] == "settlement_gap":
-        return settlement_answer(question, llm, weeks[0], db_path, assumptions)
+        return settlement_answer(question, role, llm, weeks[0], db_path, assumptions)
     assumptions["denominator"] = "all Attempts excluding Duplicates"  # D19
     base, current = weeks
     filters = plan.setdefault("filters", {})
+    if role.category is not None:  # the validator scopes the SQL anyway
+        filters.setdefault("category", role.category)
+        assumptions["scope"] = role.category
     cited = [f"{k} = {v}" for k, v in filters.items()]
     window = f"wk{base} vs wk{current}"
 
-    (overall_sql, overall_tables), *split_sql = planned_sql(plan)
+    (overall_sql, overall_tables), *split_sql = planned_sql(plan, role)
     overall = run(overall_sql, db_path)
     if set(overall["week"]) != set(weeks):  # e.g. a filter value the data does not have
         e = ModelUnavailable(f"No Attempts match {', '.join(cited)} in {window}; try rephrasing.")
@@ -182,14 +185,14 @@ def ask(question, role, llm, db_path=DB_PATH, weeks=None):
         raise
     return Answer(story["headline"], facts, d,
                   [{k: s[k] for k in ("segment", "mix", "rate")} for s in d["segments"]],
-                  story["hypotheses"], story["recommendations"], dq.check(db_path, weeks, [overall_sql, seg_sql], by_week),
+                  story["hypotheses"], story["recommendations"], dq.check(db_path, weeks, [overall_sql, seg_sql], by_week, role.category),
                   assumptions)
 
 
-def settlement_answer(question, llm, week, db_path, assumptions):
+def settlement_answer(question, role, llm, week, db_path, assumptions):
     """Settlement gap by category for one Week (D22)."""
     window = f"wk{week}"
-    sql, tables = validate(compile_sql(["settlement_gap"], ["category"], [week]))
+    sql, tables = validate(compile_sql(["settlement_gap"], ["category"], [week]), role)
     rows = run(sql, db_path)
     gaps = {c: float(g) for c, g in zip(rows["category"], rows["settlement_gap"])}
     facts = [Fact(f"{c} Settlement gap {window}", g, sql, tables, [], window, "%") for c, g in gaps.items()]

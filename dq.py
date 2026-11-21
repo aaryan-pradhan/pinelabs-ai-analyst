@@ -20,11 +20,14 @@ NULLABLE = {
 }
 
 
-def check(db_path, weeks, sqls, segments):
+def check(db_path, weeks, sqls, segments, category=None):
     """{"duplicates", "nulls", "gaps", "mismatch", "low_confidence", "caveats", "confidence"} for the
     Attempts in `weeks`, checking only the nullable columns `sqls` use.
-    `segments` is {week: {Segment: (attempts, rate)}}."""
-    window = f"{DIMENSIONS['week']} IN ({', '.join(str(int(w)) for w in weeks)})"
+    `segments` is {week: {Segment: (attempts, rate)}}. A `category` limits every check to it,
+    so a Merchant manager sees no other category's numbers."""
+    scope = "TRUE" if category is None else (
+        "merchant_id IN (SELECT merchant_id FROM merchants WHERE category = '{}')".format(category.replace("'", "''")))
+    window = f"{DIMENSIONS['week']} IN ({', '.join(str(int(w)) for w in weeks)}) AND {scope}"
     rows, attempts = run(
         f"SELECT COUNT(*) AS n, COUNT(DISTINCT txn_id) AS a FROM transactions WHERE {window}",
         db_path).iloc[0]
@@ -43,7 +46,7 @@ def check(db_path, weeks, sqls, segments):
         if rate > NULL_LIMIT:
             _, rows_label, effect = NULLABLE[c]
             caveats.append(f"`{c}` is missing on {rate:.1%} of {rows_label}; they are {effect}.")
-    daily = run(f"SELECT CAST(ts AS DATE) AS day, COUNT(*) AS n FROM {ATTEMPTS} GROUP BY 1", db_path)
+    daily = run(f"SELECT CAST(ts AS DATE) AS day, COUNT(*) AS n FROM {ATTEMPTS} WHERE {scope} GROUP BY 1", db_path)
     counts = dict(zip(pd.to_datetime(daily["day"]).dt.date, daily["n"]))
     days = [(START + pd.Timedelta(days=7 * (w - 1) + i)).date() for w in weeks for i in range(7)]
     gaps = [d for d in days if counts.get(d, 0) < GAP_SHARE * daily["n"].median()]

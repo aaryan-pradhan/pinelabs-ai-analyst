@@ -1,18 +1,32 @@
 """Check SQL against the safety rules before anything runs."""
+from dataclasses import dataclass
+
 import sqlglot
 from sqlglot import exp
 
-from semantic import TABLES
+from semantic import JOINS, TABLES
 
 ROW_LIMIT = 10000
+
+
+@dataclass(frozen=True)
+class Role:
+    """Who is asking; auth is mocked (D15). A category limits the role to that one
+    merchant category and hides Settlements."""
+    name: str
+    category: str = None
+
+
+ANALYST = Role("Analyst")
 
 
 class Rejected(Exception):
     """A query the validator refused; the message is the human-readable reason."""
 
 
-def validate(sql):
-    """Return (safe SQL, tables used) or raise Rejected."""
+def validate(sql, role=ANALYST):
+    """Return (safe SQL, tables used) or raise Rejected. A role with a category gets
+    that category's filter added; the rule lives here, not in the prompt."""
     try:
         statements = sqlglot.parse(sql, read="duckdb")
     except sqlglot.errors.ParseError:
@@ -30,6 +44,32 @@ def validate(sql):
     if unknown:
         raise Rejected(f"Column not in the semantic layer: {', '.join(unknown)}.")
 
+    if role.category is not None:
+        tree = scoped(tree, tables, role)
+        tables = sorted({t.name for t in tree.find_all(exp.Table)})
     if not tree.args.get("limit"):
         tree = tree.limit(ROW_LIMIT)
     return tree.sql(dialect="duckdb"), tables
+
+
+def scoped(tree, tables, role):
+    """`tree` limited to the role's category, joining merchants if it is not joined."""
+    if "settlements" in tables:
+        raise Rejected(f"A {role.name} cannot see Settlements; only an Analyst can.")
+    # ponytail: scopes the outer query only; safe because SQL comes from the compiler,
+    # whose one subquery is the unfiltered Attempts source. Scope subqueries if plans ever nest.
+    named = {eq.expression.name for eq in tree.find_all(exp.EQ)
+             if isinstance(eq.this, exp.Column) and eq.this.name == "category"}
+    others = sorted(n for n in named if n.lower() != role.category.lower())
+    if others:
+        raise Rejected(f"A {role.name} for {role.category} cannot see {', '.join(others)}; "
+                       f"ask about {role.category} only.")
+    # Always ANDed at the top: a match elsewhere (an OR, a CASE) does not scope the rows.
+    scope = exp.column("category", "merchants").eq(exp.Literal.string(role.category))
+    where = tree.args.get("where")
+    if where and scope in (where.this.flatten() if isinstance(where.this, exp.And) else [where.this]):
+        return tree
+    if "merchants" not in tables:
+        key = JOINS["merchants"]
+        tree = tree.join("merchants", on=f"merchants.{key} = transactions.{key}", join_type="left")
+    return tree.where(scope)
