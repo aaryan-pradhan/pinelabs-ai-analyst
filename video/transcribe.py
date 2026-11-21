@@ -1,5 +1,6 @@
 """voice/chN.wav -> words/chN.json: [[word, start, end], ...] in seconds."""
 import json
+import sys
 import subprocess
 import numpy as np
 from pathlib import Path
@@ -8,7 +9,7 @@ from faster_whisper import WhisperModel
 here = Path(__file__).parent
 (here / "words").mkdir(exist_ok=True)
 model = WhisperModel("small.en", device="cpu", compute_type="int8")
-for wav in sorted((here / "voice").glob("ch*.wav")):
+for wav in sorted((here / "voice").glob(f"{sys.argv[1] if len(sys.argv) > 1 else 'ch*'}.wav")):  # e.g. ch1
     # Decode with ffmpeg: the bundled PyAV rejects faster-whisper's open() arguments.
     pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", str(wav), "-f", "f32le", "-ac", "1", "-ar", "16000", "-"],
                          capture_output=True, check=True).stdout
