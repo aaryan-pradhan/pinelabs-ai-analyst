@@ -11,7 +11,6 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
-from playwright.sync_api import sync_playwright
 
 import cues
 from record import PRE
@@ -23,20 +22,21 @@ FIXES = {"Coaster bank": "Coastal Bank", "mixed effect": "Mix effect",
          "makeshift": "mix shift", "Certainons of": "Settlements are", "alaness": "Analyst",
          "duplicated rules": "duplicate rows", "no answers": "known answers", "buzz": "pass",
          "becomes equal": "becomes SQL", "no tables": "known tables", "DuctDB": "DuckDB",
-         "end list": "AI analyst", "so team never": "so it can never", "in the first week 6": "in week 6",
+         "end list": "AI analyst", "so team never": "so it can never", "in the first week 6": "in week 6", "exact sequel": "exact SQL",
          "coastal bank": "Coastal Bank", "2252": "2,252", r"(\d) \.(\d)": r"\1.\2", r"(\d) %": r"\1%"}
 
 
-def placeholder(c, dur, path):
-    html = f"""<body style="margin:0;width:1920px;height:1080px;display:grid;place-items:center;background:#e9e4d4;
-      font:600 44px 'Source Code Pro',monospace;color:#1d3a33;text-align:center">
-      <div>CHAPTER {c} · MANIM ANIMATION<br><span style="font-weight:400;font-size:30px">placeholder, {dur:.1f}s</span></div>"""
-    with sync_playwright() as p:
-        b = p.chromium.launch()
-        pg = b.new_page(viewport={"width": 1920, "height": 1080})
-        pg.set_content(html)
-        pg.screenshot(path=str(path), type="jpeg", quality=92)
-        b.close()
+MANIM = {2: "mix-vs-rate", 9: "how-it-works"}  # chapter -> its animation in videos/<slug>/
+
+
+def manim_frames(c):
+    """The chapter's animation as numbered frames at FPS; its clip time is the chapter's own time."""
+    d = OUT / f"manim{c}"
+    d.mkdir()
+    mp4 = HERE.parent / "videos" / MANIM[c] / f"{MANIM[c]}.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-i", str(mp4), "-vf", f"fps={FPS}", "-q:v", "2",
+                    "-start_number", "0", str(d / "%06d.jpg")], check=True)
+    return sorted(d.iterdir())
 
 
 def source(log):
@@ -54,16 +54,15 @@ def source(log):
         for (pt, at, action) in s["acts"]:
             if abs(at - pt) > 0.1:
                 report.append(f"{s['name']} {action} at {pt:.2f}s ran {at - pt:+.2f}s")
-    holds = {c: OUT / f"ch{c}.jpg" for c in cues.MANIM}
-    for c in cues.MANIM:
-        placeholder(c, tl[c]["dur"], holds[c])
+    anim = {c: manim_frames(c) for c in cues.MANIM}
     split = log["split"]
 
     def at(g):
         ch = next(ch for ch in reversed(tl) if g >= ch["start"]) if g >= 0 else tl[0]
         local = g - ch["start"]
         if ch["c"] in cues.MANIM:
-            return holds[ch["c"]]
+            frames = anim[ch["c"]]
+            return frames[min(round(local * FPS), len(frames) - 1)]
         if ch["c"] == 0:
             name, shot, local = ("card", "card", local) if local < split else ("ch0", "app", local - split)
         else:
@@ -79,7 +78,8 @@ def audio(tl):
     for ch in tl:
         c, (a, b) = ch["c"], ch["trim"]
         args += ["-i", str(HERE / "voice" / f"ch{c}.wav")]
-        f = (f"[{c}:a]atrim={a:.3f}:{b:.3f},asetpts=PTS-STARTPTS,highpass=f=80,afftdn=nf=-25,"
+        f = (f"[{c}:a]atrim={a:.3f}:{b:.3f},asetpts=PTS-STARTPTS,"
+             + (f"adelay={round(ch['pre'] * 1000)}:all=1," if ch["pre"] else "") + "highpass=f=80,afftdn=nf=-25,"
              + ("adeclip," if c == 2 else "") + "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000,"
              + f"apad,atrim=end_sample={round(ch['dur'] * 48000)}[a{c}]")  # sample-exact, so chapters never drift
         chain.append(f)
@@ -103,8 +103,8 @@ def captions(tl):
                 text = " ".join(x[0] for x in chunk)
                 for k, v in FIXES.items():
                     text = re.sub(k if "\\" in k else re.escape(k), v, text, flags=re.I)
-                g0 = ch["start"] + chunk[0][1] - ch["trim"][0]
-                g1 = ch["start"] + chunk[-1][2] - ch["trim"][0]
+                g0 = ch["start"] + ch["pre"] + chunk[0][1] - ch["trim"][0]
+                g1 = ch["start"] + ch["pre"] + chunk[-1][2] - ch["trim"][0]
                 n += 1
                 out.append(f"{n}\n{stamp(g0)} --> {stamp(g1)}\n{text}\n")
                 chunk = []

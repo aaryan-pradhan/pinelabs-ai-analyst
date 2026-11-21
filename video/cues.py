@@ -34,10 +34,10 @@ CUES = {
         ("every number", "click", "summary:has-text('Success rate Week 5')"),
         ("cites its table", "cam", {"a": "SUCCESS RATE WEEK 5 92.66%", "b": "SELECT", "zoom": 1.6}),
         ("the hypotheses", "cam", {"a": "HYPOTHESES WRITTEN", "n": 5, "zoom": 1.6}),
-        ("the recommendations", "cam", {"a": "RECOMMENDATIONS WRITTEN", "n": 6, "zoom": 1.6}),
+        ("the recommendation", "cam", {"a": "RECOMMENDATIONS WRITTEN", "n": 6, "zoom": 1.6}),
         ("here is the exact", "cam", {"sel": "details[open] pre", "zoom": 1.8}),
         ("look at the chart", "cam", {"a": "EXHIBIT A: WHY IT MOVED", "n": 10, "zoom": 1.5}),
-        ("mixed effect", "cam", {"a": "MIX EFFECT -3.99", "zoom": 2.0, "pad": 80})],
+        ("mix effect", "cam", {"a": "MIX EFFECT -3.99", "zoom": 2.0, "pad": 80})],
     3: [(-0.5, "cam", {"full": True, "top": True, "dur": 10}),
         ("we ask", "ask", "Which bank got worse on cards in wk7?", "week 7"),
         ("the answer is different", "cam", {"a": "COASTAL BANK GOT WORSE", "n": 2, **HEADLINE}),
@@ -79,6 +79,7 @@ CUES = {
         ("10 out of 10", "cam", {"sel": "[data-testid=stExpander] summary", "zoom": 2.0, "pad": 60})],
 }
 MANIM = {2, 9}  # chapters drawn as animations, not recorded
+PRE_ROLL = {2: 3.5, 9: 2.2}  # silence before an animated chapter's voice, while its picture builds
 LEADS = {"cam": 0.3, "ask": 0.15, "click": 0.6}  # start this early so the action lands on its word
 
 
@@ -119,7 +120,8 @@ def timeline():
         ws = words(c)
         a = max(0.0, ws[0][1] - LEAD)
         b = min(wav_seconds(c), ws[-1][2] + TAIL)
-        dur = b - a + (END_HOLD if c == 9 else 0)
+        pre = PRE_ROLL.get(c, 0.0)
+        dur = pre + b - a + (END_HOLD if c == 9 else 0)
         resolved = []
         for when, action, *args in CUES.get(c, []):
             phrase, off = when if isinstance(when, tuple) else (when, 0.0)
@@ -128,7 +130,7 @@ def timeline():
                 text, until, *view = args
                 args = [text, seconds(c, until, after=t + a, end=True) - a - t, *view]
             resolved.append((round(t - LEADS.get(action, 0.0), 3), action, args))
-        out.append({"c": c, "trim": (a, b), "start": start, "dur": dur, "cues": sorted(resolved, key=lambda r: r[0])})
+        out.append({"c": c, "trim": (a, b), "pre": pre, "start": start, "dur": dur, "cues": sorted(resolved, key=lambda r: r[0])})
         start += dur
     return out
 
@@ -136,5 +138,7 @@ def timeline():
 if __name__ == "__main__":
     for ch in timeline():
         print(f"ch{ch['c']}  {ch['start']:6.2f}s  +{ch['dur']:5.2f}s")
+        if ch["c"] in MANIM:  # the animation script's header: its clip time equals the chapter's time
+            print(f"      offset: {ch['pre'] - ch['trim'][0]:.3f}   until: {ch['dur']:.3f}")
         for t, action, args in ch["cues"]:
             print(f"      {t:6.2f}  {action:6} {str(args)[:80]}")
