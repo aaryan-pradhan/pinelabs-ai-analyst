@@ -291,3 +291,13 @@ def test_merchant_manager_default_plan_sql_is_scoped_by_the_validator(db_path):
     with pytest.raises(ModelUnavailable) as err:  # no plan, so only the validator scopes it
         ask("How are payments doing lately?", GROCERY, down, db_path)
     assert all("merchants.category = 'grocery'" in s for s in err.value.sql)
+
+
+def test_merchant_manager_caveats_count_only_their_category(db_path, con):
+    answer = ask("Why did success rate drop in week 6?", GROCERY, fake_llm(WK6_PLAN), db_path)
+
+    rows, attempts = con.execute(
+        "SELECT COUNT(*), COUNT(DISTINCT txn_id) FROM transactions JOIN merchants USING (merchant_id)"
+        f" WHERE category = 'grocery' AND {WEEK} IN (5, 6)").fetchone()
+    assert answer.dq["duplicates"] == rows - attempts
+    assert answer.dq["caveats"][0].startswith(f"{rows - attempts:,} Duplicates ({(rows - attempts) / rows:.1%}")
