@@ -21,6 +21,13 @@ METRICS = {
     "attempts": "COUNT(*)",
     "successful_attempts": "COUNT(*) FILTER (WHERE status = 'success')",
     "success_rate": "AVG(CASE WHEN status = 'success' THEN 1.0 ELSE 0.0 END)",
+    # SUM and AVG skip null amounts: those Attempts still count as Attempts.
+    "gmv": "SUM(amount) FILTER (WHERE status = 'success')",
+    "average_ticket": "AVG(amount) FILTER (WHERE status = 'success')",
+    # A reason's share of the Week's failed Attempts; needs the week dimension.
+    "failure_share": "COUNT(*) FILTER (WHERE status = 'failed') / SUM(COUNT(*) FILTER (WHERE status = 'failed'))"
+                     " OVER (PARTITION BY CAST(FLOOR(date_diff('day', DATE '2026-09-28', CAST(ts AS DATE)) / 7)"
+                     " AS INTEGER) + 1)",
 }
 
 DIMENSIONS = {
@@ -28,4 +35,6 @@ DIMENSIONS = {
     "week": "CAST(FLOOR(date_diff('day', DATE '2026-09-28', CAST(ts AS DATE)) / 7) AS INTEGER) + 1",
     "payment_method": "payment_method",
     "bank": "COALESCE(banks.name, 'Unknown bank')",  # null bank_id is its own Segment
+    # Failed Attempts only; successful ones group under NULL.
+    "failure_reason": "CASE WHEN status = 'failed' THEN COALESCE(failure_reason, 'Unknown reason') END",
 }

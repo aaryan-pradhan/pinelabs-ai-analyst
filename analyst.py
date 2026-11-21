@@ -38,7 +38,7 @@ class Answer:
     dq: dict  # data-quality numbers, caveats and confidence
 
 
-SPLITS = [d for d in DIMENSIONS if d != "week"]  # weeks are chosen separately
+SPLITS = [d for d in DIMENSIONS if d not in ("week", "failure_reason")]  # weeks are chosen separately
 WEEKS = range(1, 9)  # wk1 = 28 Sep 2026 ... wk8 = 16-22 Nov 2026
 
 

@@ -14,6 +14,8 @@ MIN_ATTEMPTS = 200  # a Segment below this in any Week is low-confidence
 # Nullable key column: (rows it is measured on, what the answer does with a null).
 NULLABLE = {
     "bank_id": ("TRUE", "Attempts", "counted in the Unknown bank Segment"),
+    "amount": ("TRUE", "Attempts", "counted as Attempts but left out of GMV and Average ticket"),
+    "failure_reason": ("status = 'failed'", "failed Attempts", "counted as Unknown reason"),
 }
 
 
