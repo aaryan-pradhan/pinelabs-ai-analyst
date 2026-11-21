@@ -6,7 +6,7 @@ import shutil
 import duckdb
 import pytest
 
-from analyst import ask
+from analyst import AskBack, ask
 from llm import ModelUnavailable
 
 WK6_PLAN = {"metric": "success_rate", "weeks": [5, 6]}
@@ -45,6 +45,7 @@ def test_wk6_drop_is_a_mix_shift(db_path):
         assert "LIMIT 10000" in fact.sql
         assert fact.tables == ["transactions"]
         assert fact.window == "wk5 vs wk6"
+    assert "weeks" not in answer.assumptions  # the question named its Weeks
 
 
 def test_wk7_card_drop_names_the_bank_that_got_worse(db_path):
@@ -218,3 +219,31 @@ def test_filter_that_matches_no_attempts_is_refused_with_its_sql(db_path):
     with pytest.raises(ModelUnavailable, match="No Attempts match") as err:
         ask("Which bank got worse on cards in week 7?", "analyst", fake_llm(plan), db_path)
     assert all("Cards'' OR ''1''=''1'" in s for s in err.value.sql)
+
+
+def test_vague_question_defaults_to_latest_weeks_and_all_attempts(db_path):
+    answer = ask("How's success rate lately?", "analyst", fake_llm({"metric": "success_rate"}), db_path)
+
+    assert answer.assumptions == {"weeks": [7, 8], "denominator": "all Attempts excluding Duplicates"}
+    assert all(fact.window == "wk7 vs wk8" for fact in answer.facts)
+    null = ask("How's success rate lately?", "analyst", fake_llm({"metric": "success_rate", "weeks": None}), db_path)
+    assert null.assumptions["weeks"] == [7, 8]  # a null window is no window
+
+
+def test_edited_window_reruns_for_the_edited_weeks(db_path):
+    answer = ask("How's success rate lately?", "analyst", fake_llm({"metric": "success_rate"}), db_path,
+                 weeks=[5, 6])
+
+    assert answer.assumptions["weeks"] == [5, 6]
+    assert all(fact.window == "wk5 vs wk6" for fact in answer.facts)
+    assert answer.decomposition["dimension"] == "payment_method"  # the planted wk6 mix shift
+    assert -0.05 < answer.decomposition["total"] < -0.03
+
+
+def test_question_with_no_sensible_default_is_asked_back(db_path):
+    back = {"ask": "Which metric do you mean: Success rate or Settlement gap?"}
+
+    with pytest.raises(AskBack, match="Which metric do you mean"):
+        ask("How are things?", "analyst", fake_llm(back), db_path)
+    with pytest.raises(ModelUnavailable, match="unusable reply"):  # nothing to ask the user
+        ask("How are things?", "analyst", fake_llm({"ask": " "}), db_path)
