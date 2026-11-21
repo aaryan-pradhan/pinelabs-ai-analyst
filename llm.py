@@ -16,7 +16,7 @@ MODELS = [  # all ":free" variants; a failed model is skipped, never a paid one
 ]
 CACHE_DIR = Path(__file__).parent / ".llm_cache"
 # Committed replies for the demo questions' prompts (D4, D34): real free-model plans,
-# narration written with Claude Code during development.
+# narration written during development.
 DEMO_PATH = Path(__file__).parent / "demo" / "replay.json"
 URL = "https://openrouter.ai/api/v1/chat/completions"
 
