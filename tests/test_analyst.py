@@ -301,3 +301,25 @@ def test_merchant_manager_caveats_count_only_their_category(db_path, con):
         f" WHERE category = 'grocery' AND {WEEK} IN (5, 6)").fetchone()
     assert answer.dq["duplicates"] == rows - attempts
     assert answer.dq["caveats"][0].startswith(f"{rows - attempts:,} Duplicates ({(rows - attempts) / rows:.1%}")
+
+
+def ad_hoc(sql):
+    return fake_llm({"sql": sql})
+
+
+def test_destructive_request_is_rejected_as_not_a_select(db_path, con):
+    failed = con.execute("SELECT COUNT(*) FROM transactions WHERE status = 'failed'").fetchone()[0]
+
+    with pytest.raises(Rejected, match="Only a single SELECT"):
+        ask("Delete the failed transactions", ANALYST,
+            ad_hoc("DELETE FROM transactions WHERE status = 'failed'"), db_path)
+    assert con.execute("SELECT COUNT(*) FROM transactions WHERE status = 'failed'").fetchone()[0] == failed
+
+
+def test_ad_hoc_sql_runs_with_the_missing_limit_added(db_path, con):
+    assert con.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] > 10000
+
+    answer = ask("List every transaction id", ANALYST, ad_hoc("SELECT txn_id FROM transactions"), db_path)
+    assert answer.result["sql"] == "SELECT txn_id FROM transactions LIMIT 10000"
+    assert answer.result["tables"] == ["transactions"]
+    assert len(answer.result["rows"]) == 10000

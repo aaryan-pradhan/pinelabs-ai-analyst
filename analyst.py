@@ -37,6 +37,7 @@ class Answer:
     recommendations: list  # model narration, not evidence
     dq: dict  # data-quality numbers, caveats and confidence
     assumptions: dict  # defaults chosen for what the question left open, editable by the user
+    result: dict = None  # ad-hoc answers only: {"sql", "tables", "rows"}, rows as a DataFrame
 
 
 class AskBack(Exception):
@@ -71,8 +72,9 @@ def plan_prompt(question):
 
 def usable(plan):
     weeks, filters = plan.get("weeks"), plan.get("filters", {})
-    if "ask" in plan:
-        return isinstance(plan["ask"], str) and bool(plan["ask"].strip())
+    for free_text in ("ask", "sql"):
+        if free_text in plan:
+            return isinstance(plan[free_text], str) and bool(plan[free_text].strip())
     if plan.get("metric") not in ANSWERED:
         return False
     n_weeks, dims = ANSWERED[plan["metric"]]
@@ -139,6 +141,8 @@ def ask(question, role, llm, db_path=DB_PATH, weeks=None):
         raise
     if "ask" in plan:
         raise AskBack(plan["ask"])
+    if "sql" in plan:
+        return ad_hoc_answer(plan["sql"], role, db_path)
     assumptions = {}
     if weeks is not None:
         plan["weeks"] = assumptions["weeks"] = weeks
@@ -187,6 +191,17 @@ def ask(question, role, llm, db_path=DB_PATH, weeks=None):
                   [{k: s[k] for k in ("segment", "mix", "rate")} for s in d["segments"]],
                   story["hypotheses"], story["recommendations"], dq.check(db_path, weeks, [overall_sql, seg_sql], by_week, role.category),
                   assumptions)
+
+
+def ad_hoc_answer(sql, role, db_path):
+    """Model-written SQL for a question the semantic layer's metrics cannot express (D6)."""
+    sql, tables = validate(sql, role)
+    assumptions = {} if role.category is None else {"scope": role.category}
+    caveats = ["Model-written SQL outside the semantic layer's metrics: it reads raw tables, "
+               "so Duplicates are counted unless the SQL removes them. Check the SQL before relying on it."]
+    return Answer("Ad-hoc query: model-written SQL, checked by the validator before it ran.",
+                  [], {}, [], [], [], {"confidence": "Low: the SQL was written by a free model.", "caveats": caveats}, assumptions,
+                  {"sql": sql, "tables": tables, "rows": run(sql, db_path)})
 
 
 def settlement_answer(question, role, llm, week, db_path, assumptions):
