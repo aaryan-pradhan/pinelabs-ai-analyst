@@ -1,0 +1,30 @@
+# D36: the owner's GitHub palette, one amber accent, dark only.
+[client]
+toolbarMode = "minimal"
+
+[theme]
+base = "dark"
+primaryColor = "#ffc400"
+backgroundColor = "#0d1117"
+secondaryBackgroundColor = "#161b22"
+textColor = "#e6edf3"
+linkColor = "#ffc400"
+borderColor = "#30363d"
+dataframeBorderColor = "#21262d"
+dataframeHeaderBackgroundColor = "#161b22"
+codeBackgroundColor = "#010409"
+codeTextColor = "#c9d1d9"
+font = "IBM Plex Sans:https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+codeFont = "IBM Plex Mono:https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap"
+headingFontWeights = [600, 600, 500, 500, 500, 500]
+baseFontSize = 15
+baseRadius = "6px"
+buttonRadius = "6px"
+showWidgetBorder = true
+yellowColor = "#ffc400"
+chartCategoricalColors = ["#ffc400", "#6e7681", "#8b949e", "#484f58"]
+
+[theme.sidebar]
+backgroundColor = "#010409"
+secondaryBackgroundColor = "#0d1117"
+showSidebarBorder = true
