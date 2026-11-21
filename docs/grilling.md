@@ -40,6 +40,9 @@ Full brief: [brief.md](brief.md). Deadline: **22 Nov 2026, 6:00 PM IST**. Demo-r
 | D32 | Free model | OpenRouter `nvidia/nemotron-3.5-super-vl:free`, falling back to `inclusionai/ling-3.2-flash:free` then `google/gemma-4-31b-it:free`. Smoke-test against the plan schema when wiring; replace if it fails. Aaryan creates the OpenRouter key and allows free-model data policy then. Limits (21 Nov): 20 req/min, 50 req/day under $10 lifetime credit. |
 | D33 | Daily cap | Stay at 50 req/day. In development an identical prompt replays a saved response, so eval reruns cost almost nothing. Fallback if still blocked: buy $10 credit once. The replay cache is the priority for the demo; live use is expected to be light. |
 
+| D34 | Demo cache authoring | No Anthropic API key. The demo cache is written in a Claude Code session (Opus 5.5): numbers, SQL and charts come from real pipeline execution; Claude writes and polishes the headline, Hypotheses and Recommendations. Banner + README say the cached narration was written with Claude Code during development. Supersedes the Opus-script part of D20/D25. |
+| D35 | Live model access | Live model is NVIDIA Nemotron (D32), reached through OpenRouter, which needs only the free OpenRouter key. Key needed only when the live slice is wired; until then the app runs replay-only. |
+
 ## Open questions
 
-None. Next step (D11): `docs/PLAN.md`.
+None. Shared understanding confirmed 21 Nov. Next step (D11): `docs/PLAN.md`.
