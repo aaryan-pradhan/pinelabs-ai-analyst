@@ -6,7 +6,7 @@ import streamlit as st
 
 import generator
 import llm
-from analyst import ask
+from analyst import AskBack, ask
 
 
 st.set_page_config(page_title="AI Business Analyst")
@@ -18,9 +18,14 @@ except (KeyError, FileNotFoundError):  # no key: the app still starts, questions
     pass
 
 question = st.text_input("Ask a question", "Why did success rate drop in week 6?")
+if st.session_state.get("asked") != question:  # a new question drops the edited window
+    st.session_state.asked, st.session_state.weeks = question, None
 if question:
     try:
-        answer = ask(question, "analyst", llm.complete)
+        answer = ask(question, "analyst", llm.complete, weeks=st.session_state.weeks)
+    except AskBack as e:
+        st.info(str(e))
+        st.stop()
     except llm.ModelUnavailable as e:
         st.warning(str(e))
         st.caption("SQL for this question:")
@@ -29,6 +34,19 @@ if question:
         st.stop()
     st.subheader(answer.headline)
     st.caption("Headline written by a free model; only the numbers in Facts come from executed SQL.")
+
+    chips = st.columns(len(answer.assumptions) or 1)
+    if "weeks" in answer.assumptions:
+        weeks = answer.assumptions["weeks"]
+        with chips[0].popover("Window: " + " vs ".join(f"wk{w}" for w in weeks)):
+            # A comparison is always the chosen Week against the one before it.
+            current = st.selectbox("Week", range(len(weeks), 9), index=weeks[-1] - len(weeks))
+            if st.button("Re-run"):
+                st.session_state.weeks = list(range(current - len(weeks) + 1, current + 1))
+                st.rerun()
+    if "denominator" in answer.assumptions:
+        with chips[-1].popover(f"Denominator: {answer.assumptions['denominator']}"):
+            st.caption("The only Success rate denominator the semantic layer defines (D19).")
 
     d = answer.decomposition  # empty for a Settlement gap answer
     unit = "pp" if d else "%"
