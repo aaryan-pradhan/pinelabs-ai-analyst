@@ -1,9 +1,9 @@
 import json
 import os
+import textwrap
 from html import escape
 
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
 import evaluate
@@ -12,61 +12,79 @@ import llm
 from analyst import WEEKS, AskBack, ask, shown
 from validator import ANALYST, Rejected, Role
 
-ACCENT, MUTED, GRID, INK = "#ffc400", "#484f58", "#21262d", "#8b949e"  # D36 palette, as in config.toml
-MONO = "IBM Plex Mono, ui-monospace, monospace"
+COL = 86  # characters per line: the 774px column at 9px per Source Code Pro character
 
-st.set_page_config(page_title="AI Business Analyst", layout="wide")
+st.set_page_config(page_title="AI Business Analyst")
 st.html("""<style>
-.block-container {max-width: 1180px; padding: 3rem 3rem 6rem}
-.sw {display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin: 0 .3rem 0 .9rem}
+.block-container {max-width: 870px; padding: 54px 48px 108px}
+.stMain {counter-reset: ln}
+.stMain [data-testid="stVerticalBlock"] {gap: 0}
 header[data-testid="stHeader"] {background: transparent}
-.lbl {font-family: 'IBM Plex Mono', monospace; font-size: .72rem; letter-spacing: .08em;
-      text-transform: uppercase; color: #8b949e; margin: 0 0 .35rem}
-.lead {color: #8b949e; margin: -.4rem 0 1.4rem; max-width: 60ch}
-.headline {font-size: 1.65rem; line-height: 1.3; font-weight: 500; letter-spacing: -.01em;
-           color: #e6edf3; margin: .1rem 0 .2rem; max-width: 46ch}
-.tag {display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: .7rem; color: #8b949e;
-      border: 1px solid #30363d; border-radius: 4px; padding: .05rem .4rem; margin-left: .5rem;
-      text-transform: none; letter-spacing: 0}
-.meter {display: inline-flex; gap: 3px; margin-right: .6rem; vertical-align: middle}
-.meter i {width: 14px; height: 6px; border-radius: 1px; background: #30363d}
-.meter i.on {background: #ffc400}
-[data-testid="stTextInput"] input {font-size: 1.05rem; padding: .85rem 1rem}
-[data-testid="stMetricValue"] {font-family: 'IBM Plex Mono', monospace; font-size: 1.5rem}
-[data-testid="stMetricLabel"] p {font-family: 'IBM Plex Mono', monospace; font-size: .75rem; color: #8b949e}
-[data-testid="stPopover"] button p, [data-testid="stExpander"] summary p {font-family: 'IBM Plex Mono', monospace;
-      font-size: .78rem}
+section[data-testid="stSidebar"] {min-width: 280px}
+.doc {text-transform: uppercase; line-height: 27px}
+.ln {position: relative; min-height: 27px; white-space: pre-wrap}
+.stMain .ln::before {counter-increment: ln; content: counter(ln); position: absolute; left: -40px; width: 24px;
+      text-align: right; font-size: 10px; color: #9a9a9a; text-transform: none}
+.row {display: flex; justify-content: space-between; gap: 18px}
+.c {text-align: center}
+.rule {display: block; overflow: hidden; white-space: nowrap}
+.inv {background: #111; color: #fff; padding: 0 13.5px}
+.band {background: #0a0a0a; color: #f2f2f2; box-shadow: 0 0 0 100vmax #0a0a0a; clip-path: inset(0 -100vmax);
+       padding: 27px 0; margin: 27px 0}
+.band .ln::before {color: #5c5c5c}
+.dim {color: #8a8a8a}
+.g {display: grid; grid-template-columns: 14ch 1fr 1fr; column-gap: 2ch}
+.g1 {display: grid; grid-template-columns: 22ch 1fr; column-gap: 2ch}
+.bar {display: inline-block; height: 9px; margin-right: 9px;
+      background: radial-gradient(circle, #8a8a8a 1px, transparent 1.4px) 0 0 / 4px 4px}
+.bar.on {background: #f2f2f2}
+.meter {letter-spacing: 2px}
+summary {list-style: none; cursor: pointer}
+summary::-webkit-details-marker {display: none}
+summary:hover {background: #f4f4f4}
+details > summary > span:first-child::before {content: "+ "}
+details[open] > summary > span:first-child::before {content: "- "}
+details pre {text-transform: none; background: #f4f4f4; margin: 0; padding: 13.5px; font-size: 13px;
+       line-height: 20px; white-space: pre-wrap}
+details div.ln {color: #6b6b6b}
+[data-testid="stTextInput"] input {font-size: 15px; padding: 10px 13.5px}
+[data-testid="stPopover"] button {border: 0; background: transparent; padding: 0 4.5px; min-height: 27px}
+[data-testid="stPopover"] button:hover {background: #111; color: #fff}
+[data-testid="stPopover"] button p {text-transform: uppercase; font-size: 15px}
+[data-testid="stPopover"] button p::before {content: "["}
+[data-testid="stPopover"] button p::after {content: "]"}
 </style>""")  # ponytail: data-testid selectors are Streamlit internals; recheck on an upgrade
 
 
-def label(text, tag=""):
-    st.html(f'<p class="lbl">{text}{f"<span class=tag>{tag}</span>" if tag else ""}</p>')
+def ln(html="", cls=""):
+    """One numbered line of the document; `html` is already escaped."""
+    return f'<div class="ln {cls}">{html}</div>'
 
 
-def styled(fig, title):
-    fig.update_layout(
-        title={"text": title, "font": {"family": MONO, "size": 12, "color": INK}, "x": 0, "y": .97},
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=300,
-        font={"family": MONO, "size": 11, "color": INK}, margin={"l": 0, "r": 0, "t": 36, "b": 0},
-        bargap=.35, bargroupgap=.08, hoverlabel={"font": {"family": MONO}}, showlegend=False)
-    fig.update_yaxes(gridcolor=GRID, zeroline=False, showticklabels=False, showline=False)  # bars carry labels
-    fig.update_xaxes(showgrid=False, linecolor=GRID, tickfont={"color": "#c9d1d9"}, automargin=True)
-    return fig
+def lines(text, first="", rest=""):
+    """Plain text wrapped to the column, one numbered line per wrapped line, with an optional hanging prefix."""
+    wrapped = textwrap.wrap(text, COL - len(first)) or [""]
+    return "".join(ln(escape((first if i == 0 else rest) + part)) for i, part in enumerate(wrapped))
 
 
-def plot(fig):
-    st.plotly_chart(fig, theme=None, config={"displayModeBar": False})
+def row(left, right=""):
+    return ln(f"<span>{left}</span><span>{right}</span>", "row")
 
 
-def week_bars(segments, key, weeks, title):
-    """One panel: a Segment value in the base Week (muted) against the current one (accent)."""
-    fig = go.Figure()
-    for week, color, suffix in ((weeks[0], MUTED, "_before"), (weeks[1], ACCENT, "_after")):
-        fig.add_bar(name=week, x=[s["segment"] for s in segments], y=[s[key + suffix] * 100 for s in segments],
-                    marker={"color": color}, texttemplate="%{y:.1f}", textposition="outside",
-                    hovertemplate="%{x} " + week + ": %{y:.2f}%<extra></extra>",
-                    textfont={"color": INK, "size": 10}, cliponaxis=False)
-    return styled(fig, title)
+BLANK, RULE = ln(), ln(f'<span class="rule">{"=" * COL}</span>')
+
+
+def doc(*parts, cls=""):
+    st.html(f'<div class="doc {cls}">{"".join(parts)}</div>')
+
+
+def notice(tag, text):
+    doc(BLANK, ln(f'<span class="inv">{escape(tag)}</span>'), BLANK, lines(text), BLANK)
+
+
+def bar(value, top, on, width):
+    """A bar `width` px long at `top`, solid for the series that matters and dotted for the other."""
+    return f'<i class="bar{" on" if on else ""}" style="width:{abs(value) / (top or 1) * width:.0f}px"></i>'
 
 
 generator.ensure(generator.DB_PATH)
@@ -76,20 +94,20 @@ except (KeyError, FileNotFoundError):  # no key: the app still starts, questions
     pass
 
 with st.sidebar:
-    label("Signed in as")
+    doc(ln("Signed in as"))
     role = ANALYST  # auth is mocked: the viewer picks a role (D15)
     if st.selectbox("Role", ["Analyst", "Merchant manager"], label_visibility="collapsed") == "Merchant manager":
         role = Role("Merchant manager", st.selectbox("Category", generator.CATEGORIES))
     st.caption("A Merchant manager sees only their category; the SQL validator enforces it.")
     st.divider()
-    label("Quality check")
+    doc(ln("Quality check"))
     run_eval = st.button("Run eval", width="stretch")
     st.caption("Grades 10 known-answer questions on the free model.")
 
-label(f"Pine Labs · Payments · wk{WEEKS[0]} – wk{WEEKS[-1]}")
-st.title("AI Business Analyst")
-st.html('<p class="lead">Ask about Success rate, GMV or Settlements. Every number below comes from SQL '
-        f"that ran on {len(WEEKS)} Weeks of payment Attempts; anything a model wrote is labelled.</p>")
+doc(ln("Pine Labs"), ln("Payments analytics"), ln(f"{len(WEEKS)} Weeks of payment Attempts, wk{WEEKS[0]} - wk{WEEKS[-1]}"),
+    BLANK, ln('<span class="inv">AI Business Analyst: ask about Success rate, GMV or Settlements</span>'), BLANK,
+    lines("Every number below comes from SQL that ran on the data. Anything a model wrote is labelled as such."),
+    BLANK)
 
 if run_eval:  # 10 known-answer questions (D26)
     try:
@@ -113,106 +131,97 @@ if question:
     except (Rejected, AskBack, llm.ModelUnavailable) as e:
         answer = e  # shown after the banner, since st.stop() drops anything drawn later
     if replayed:
-        st.info("Replay mode: the free model is unavailable (no key or rate-limited), so this demo "
-                "question replays a cached model reply. Numbers, SQL and charts still come from "
-                "running the pipeline; any cached headline, Hypotheses and Recommendations were "
-                "written with Claude Code during development.")
+        notice("Replay mode", "The free model is unavailable (no key or rate-limited), so this demo question "
+               "replays a cached model reply. Numbers, SQL and charts still come from running the pipeline; any "
+               "cached headline, Hypotheses and Recommendations were written with Claude Code during development.")
     if isinstance(answer, Rejected):
-        st.error(str(answer))
+        notice("Rejected", str(answer))
         for sql in answer.sql:
             st.code(sql, language="sql")
         st.stop()
     if isinstance(answer, AskBack):
-        st.info(str(answer))
+        notice("Question back", str(answer))
         st.stop()
     if isinstance(answer, llm.ModelUnavailable):
-        st.warning(str(answer))
-        st.caption("SQL for this question:")
+        notice("Model unavailable", str(answer) + " SQL for this question:")
         for sql in answer.sql:
             st.code(sql, language="sql")
         st.stop()
     writer = "Claude Code during development" if replayed else "a free model"
 
-    with st.container(border=True):
-        label("Answer", "" if answer.result else f"headline written by {writer}")
-        st.html(f'<p class="headline">{escape(answer.headline)}</p>')
-        chips = st.container(horizontal=True, gap="small")
-        if "weeks" in answer.assumptions:
-            weeks = answer.assumptions["weeks"]
-            with chips.popover("Window: " + " vs ".join(f"wk{w}" for w in weeks)):
-                # A comparison is always the chosen Week against the one before it.
-                current = st.selectbox("Week", WEEKS[len(weeks) - 1:], index=weeks[-1] - len(weeks))
-                if st.button("Re-run", type="primary"):
-                    st.session_state.weeks = list(range(current - len(weeks) + 1, current + 1))
-                    st.rerun()
-        if "scope" in answer.assumptions:
-            with chips.popover(f"Scope: {answer.assumptions['scope']}"):
-                st.caption(f"A {role.name} sees only their category.")
-        if "denominator" in answer.assumptions:
-            with chips.popover(f"Denominator: {answer.assumptions['denominator']}"):
-                st.caption("The only Success rate denominator the semantic layer defines (D19).")
+    doc(BLANK, RULE, BLANK, row('<span class="inv">Answer</span>', "" if answer.result else f"headline by {writer}"),
+        BLANK, lines(answer.headline), BLANK)
+    chips = st.container(horizontal=True, gap="small")
+    if "weeks" in answer.assumptions:
+        weeks = answer.assumptions["weeks"]
+        with chips.popover("Window: " + " vs ".join(f"wk{w}" for w in weeks)):
+            # A comparison is always the chosen Week against the one before it.
+            current = st.selectbox("Week", WEEKS[len(weeks) - 1:], index=weeks[-1] - len(weeks))
+            if st.button("Re-run", type="primary"):
+                st.session_state.weeks = list(range(current - len(weeks) + 1, current + 1))
+                st.rerun()
+    if "scope" in answer.assumptions:
+        with chips.popover(f"Scope: {answer.assumptions['scope']}"):
+            st.caption(f"A {role.name} sees only their category.")
+    if "denominator" in answer.assumptions:
+        with chips.popover(f"Denominator: {answer.assumptions['denominator']}"):
+            st.caption("The only Success rate denominator the semantic layer defines (D19).")
 
     if answer.result:  # an ad-hoc question: the rows its model-written SQL returned
-        with st.container(border=True):
-            label("Result", "model-written SQL")
-            st.dataframe(answer.result["rows"], hide_index=True)
-            st.code(answer.result["sql"], language="sql")
-            st.caption(f"Tables: {', '.join(answer.result['tables'])}")
+        doc(BLANK, ln("Exhibit A: result of model-written SQL", "c"), row(f"Tables: {escape(', '.join(answer.result['tables']))}"), BLANK)
+        st.dataframe(answer.result["rows"], hide_index=True)
+        st.code(answer.result["sql"], language="sql")
     else:
         d = answer.decomposition  # empty for a by-category answer (GMV, Settlement gap)
-        with st.container(border=True):
-            if d:
-                by = d["dimension"].replace("_", " ")
-                weeks = answer.facts[0].window.split(" vs ")
-                st.html(f'<p class="lbl">Why it moved · by {by}<span class="sw" style="background:{MUTED}"></span>'
-                        f'{weeks[0]}<span class="sw" style="background:{ACCENT}"></span>{weeks[1]}</p>')
-                left, right = st.columns(2, gap="large")
-                with left:
-                    plot(week_bars(d["segments"], "share", weeks, f"Share of Attempts by {by} (%)"))
-                with right:
-                    plot(week_bars(d["segments"], "rate", weeks, f"Success rate by {by} (%)"))
-                st.caption(f"Total {d['total'] * 100:+.2f}pp = Mix effect {d['mix'] * 100:+.2f}pp (Attempts moving "
-                           f"between {by}s) + Rate effect {d['rate'] * 100:+.2f}pp (rates changing within them).")
-            else:
-                gmv = "gmv" in answer.chart[0]
-                key = "gmv" if gmv else "gap"
-                values = [c[key] * (1 if gmv else 100) for c in answer.chart]
-                top = max(range(len(values)), key=lambda i: abs(values[i]))  # the bar the headline names
-                fig = go.Figure(go.Bar(
-                    x=[c["segment"] for c in answer.chart], y=values, showlegend=False, cliponaxis=False,
-                    marker={"color": [ACCENT if i == top else MUTED for i in range(len(values))]},
-                    texttemplate="₹%{y:,.3s}" if gmv else "%{y:+.2f}%", textposition="outside",
-                    textfont={"color": INK, "size": 10}))
-                label("By category · " + answer.facts[0].window)
-                plot(styled(fig, "GMV (successful Attempts, Duplicates removed)" if gmv
-                            else "Settlement gap (% of successful Attempt value)"))
+        if d:
+            by = escape(d["dimension"].replace("_", " "))
+            w0, w1 = answer.facts[0].window.split(" vs ")
+            top = {k: max(s[k + w] for s in d["segments"] for w in ("_before", "_after")) for k in ("share", "rate")}
 
-        with st.container(border=True):
-            label("Facts", "from executed SQL")
-            for row in range(0, len(answer.facts), 3):
-                for col, fact in zip(st.columns(3, gap="large"), answer.facts[row:row + 3]):
-                    with col:
-                        st.metric(fact.label, f"{fact.value * 100:+.2f}pp" if fact.unit == "pp" else shown(fact))
-                        with st.expander("SQL"):
-                            st.code(fact.sql, language="sql")
-                            st.caption(f"Tables: {', '.join(fact.tables)}  \n"
-                                       f"Filters: {', '.join(fact.filters) or 'none'}  \n"
-                                       f"Window: {fact.window}")
+            def cell(s, key, after):
+                v = s[key + ("_after" if after else "_before")]
+                return f'<span class="{"" if after else "dim"}">{bar(v, top[key], after, 230)}{v * 100:.1f}</span>'
+
+            band = [ln("Exhibit A: why it moved", "c"),
+                    row(f"By {by}, {w0} vs {w1}", f'{bar(1, 1, False, 18)}{w0}  {bar(1, 1, True, 18)}{w1}'), BLANK,
+                    ln("<span></span><span>Share of Attempts, %</span><span>Success rate, %</span>", "g")]
+            for s in d["segments"]:
+                band += [ln(f"<span>{escape(s['segment'])}</span>{cell(s, 'share', False)}{cell(s, 'rate', False)}", "g"),
+                         ln(f"<span></span>{cell(s, 'share', True)}{cell(s, 'rate', True)}", "g")]
+            band += [BLANK, lines(f"Total {d['total'] * 100:+.2f}pp = Mix effect {d['mix'] * 100:+.2f}pp + Rate effect "
+                                  f"{d['rate'] * 100:+.2f}pp. Mix effect: Attempts moving between {by}s. Rate "
+                                  "effect: rates changing within them.")]
+        else:
+            gmv = "gmv" in answer.chart[0]
+            values = [c["gmv" if gmv else "gap"] * (1 if gmv else 100) for c in answer.chart]
+            hi = max(range(len(values)), key=lambda i: abs(values[i]))  # the bar the headline names
+            peak = abs(values[hi])
+            band = [ln("Exhibit A: by category", "c"),
+                    row("GMV, successful Attempts, Duplicates removed" if gmv
+                        else "Settlement gap, % of successful Attempt value", escape(answer.facts[0].window)), BLANK]
+            for i, (c, v) in enumerate(zip(answer.chart, values)):
+                band.append(ln(f"<span>{escape(c['segment'])}</span><span class=\"{'' if i == hi else 'dim'}\">"
+                               f"{bar(v, peak, i == hi, 420)}{f'₹{v:,.0f}' if gmv else f'{v:+.2f}%'}</span>", "g1"))
+        doc(*band, cls="band")
+
+        facts = "".join(
+            f'<details><summary class="ln row"><span>{escape(f.label)}</span>'
+            f'<span>{f"{f.value * 100:+.2f}pp" if f.unit == "pp" else escape(shown(f))}</span></summary>'
+            f"<pre>{escape(f.sql)}</pre>{ln('Tables: ' + escape(', '.join(f.tables)))}"
+            f"{ln('Filters: ' + escape(', '.join(f.filters) or 'none'))}{ln('Window: ' + escape(f.window))}</details>"
+            for f in answer.facts)
+        doc(ln("Exhibit B: Facts from executed SQL", "c"), row("Fact, click for its SQL", "Value"), facts, BLANK)
 
     narration = [(t, i) for t, i in (("Hypotheses", answer.hypotheses), ("Recommendations", answer.recommendations)) if i]
     if narration:
-        with st.container(border=True):
-            label("Model narration", f"written by {writer}, not evidence; check it against the Facts")
-            for col, (title, items) in zip(st.columns(len(narration), gap="large"), narration):
-                with col:
-                    st.markdown(f"**{title}**")
-                    st.markdown("\n".join(f"- {item}" for item in items))
+        parts = [RULE, BLANK, ln("Exhibit C: model narration", "c"),
+                 lines(f"Written by {writer}. Not evidence: check it against Exhibit B."), BLANK]
+        for title, items in narration:
+            parts += [ln(title), *(lines(item, f"{title[0]}{n}  ", "    ") for n, item in enumerate(items, 1)), BLANK]
+        doc(*parts)
 
-    with st.container(border=True):
-        level, _, why = answer.dq["confidence"].partition(": ")
-        lit = {"High": 3, "Medium": 2}.get(level, 1)
-        label("Caveats")
-        st.html(f'<p style="margin:0"><span class="meter">{"".join("<i class=on></i>" if i < lit else "<i></i>" for i in range(3))}'
-                f'</span><b>{escape(level)} confidence</b> <span style="color:#8b949e">· {escape(why)}</span></p>')
-        if answer.dq["caveats"]:
-            st.markdown("\n".join(f"- {line}" for line in answer.dq["caveats"]))
+    level, _, why = answer.dq["confidence"].partition(": ")
+    lit = {"High": 3, "Medium": 2}.get(level, 1)
+    doc(RULE, BLANK, row('<span class="inv">Caveats</span>',
+                         f'{escape(level)} confidence <span class="meter">{"■" * lit}{"□" * (3 - lit)}</span>'),
+        BLANK, lines(why), *(lines(c, "- ", "  ") for c in answer.dq["caveats"]))
