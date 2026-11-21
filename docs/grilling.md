@@ -2,7 +2,7 @@
 
 Full brief: [brief.md](brief.md). Deadline: **22 Nov 2026, 6:00 PM IST**. Demo-ready target: **22 Nov 12:00 PM IST**.
 
-## Settled decisions (rounds 1-4, 21 Nov 2026)
+## Settled decisions (rounds 1-5, 21 Nov 2026)
 
 | # | Decision | Answer |
 |---|----------|--------|
@@ -30,10 +30,13 @@ Full brief: [brief.md](brief.md). Deadline: **22 Nov 2026, 6:00 PM IST**. Demo-r
 | D22 | Semantic layer | Metrics: Attempts, successful Attempts, Success rate, failure share by reason, GMV, average ticket, settled amount, settlement gap %. Dimensions: Week, date, payment method, bank, bank type, merchant, category, city, tier, failure reason. Joins: transactions-merchants on `merchant_id`, transactions-banks on `bank_id`; settlements vs transactions only after both are aggregated by merchant + date. Null `bank_id` goes to an "Unknown bank" segment; null `amount` counts as an Attempt but is excluded from GMV, with a flag. |
 | D23 | DQ checks | Run per answer, scoped to its tables + window: (1) Duplicates count/% (excluded), (2) null rate per key column used, caveat above 1%, (3) coverage gap: any day below 50% of usual volume, (4) Source mismatch above 0.5% (only if role sees Settlements), (5) segment below 200 Attempts marked low-confidence, feeding the confidence line. |
 | D24 | Decomposition | Midpoint (symmetric) mix-vs-rate: mix = sum (s1-s0)(r0+r1)/2, rate = sum (r1-r0)(s0+s1)/2; sums exactly to the total change. Run by payment method, bank and category; lead with the dimension that explains most. |
+| D25 | Live model cost | Live app must cost nothing: a free model, no paid live calls. Opus 5.5 is used only by a local script that writes the replay cache. Supersedes the Haiku default in D1/D20. Model dropdown and Sonnet escalation dropped. Which free model: pending research. |
+| D26 | Eval set | 10 known-answer questions: (1) wk6 drop, total about -4pp, leads with payment method, mix at least 80%; (2) by method wk6 vs wk5, each within +/-0.3pp; (3) bank worse on cards wk7, planted bank 92% to 78%, rate effect dominates; (4) Duplicate count, exact; (5) wk5 settlements, planted category gap about 3%, Source mismatch; (6) merchant_manager settlements, blocked; (7) merchant_manager other category, blocked; (8) "lately", Assumption wk8 vs wk7; (9) delete request, rejected as non-SELECT; (10) GMV by category wk8, exact. |
+| D27 | Eval grading | Expected values from hand-written SQL over generated data, written to `eval/expected.json` by the generator. Structured-field grading only (rates +/-0.2pp, counts exact, chosen dimension, blocked/rejected flag, Assumption); no LLM judge. Deployed eval button falls back to the last committed result, labelled. |
+| D28 | Query limits | DuckDB read-only, 5 s timeout, `LIMIT 10000` added when missing, keyless joins rejected, semantic-layer tables/columns/joins only, results cached per (SQL, role) with `st.cache_data`. |
+| D29 | Manager scope | Unspecified category: validator adds the manager's own category filter, shown as an Assumption chip. Explicit other category: blocked with reason. |
 
 ## Open questions (next round)
 
-- Does "Haiku 5.5 only" drop the model dropdown, Sonnet escalation (D1) and OpenRouter (D2)?
-- Eval question set, grading method, source of expected values.
-- Query limits (timeout, row LIMIT).
-- Merchant-manager scope edge: unspecified category vs explicitly another category.
+- Which free model for live use (research running), and what happens when it is rate-limited or down.
+- Which model the committed eval result is run on.
