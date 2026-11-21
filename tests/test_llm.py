@@ -100,7 +100,8 @@ def test_the_model_that_answered_is_known_on_replay(tmp_path):
 def test_a_demo_prompt_the_free_model_cannot_answer_replays_its_cached_reply(tmp_path):
     demo = tmp_path / "replay.json"
     demo.write_text('{"demo prompt": "cached reply"}')
-    no_quota = lambda prompt, check: (_ for _ in ()).throw(llm.NoQuota("limit"))
+    def no_quota(prompt, check):
+        raise llm.NoQuota("limit")
     replayed = []
 
     answer = llm.with_replay(no_quota, replayed, demo)
