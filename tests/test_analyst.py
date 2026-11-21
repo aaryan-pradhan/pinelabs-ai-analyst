@@ -81,6 +81,20 @@ def test_duplicates_are_counted_exactly_and_excluded(db_path, con):
     assert overall["attempts"].sum() == attempts
 
 
+def test_unknown_bank_segment_keeps_totals_and_null_caveat_fires(db_path, con):
+    plan = {"metric": "success_rate", "dimensions": ["bank"], "weeks": [5, 6]}
+    answer = ask("Did any bank get worse in week 6?", "analyst", fake_llm(plan), db_path)
+
+    assert "Unknown bank" in {row["segment"] for row in answer.chart}
+    overall = con.execute(answer.facts[0].sql).df().set_index("week")["attempts"]
+    by_bank = con.execute(answer.facts[-1].sql).df().groupby("week")["attempts"].sum()
+    assert (by_bank == overall).all()
+    assert any("bank_id" in line and "Unknown bank" in line for line in answer.dq["caveats"])
+
+    wk6 = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), db_path)
+    assert not any("bank_id" in line for line in wk6.dq["caveats"])  # only columns the answer uses
+
+
 def down(prompt, check):
     raise ModelUnavailable("free model limit reached, try again in a minute")
 

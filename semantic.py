@@ -27,4 +27,5 @@ DIMENSIONS = {
     # Week is Monday to Sunday, wk1 = 28 Sep 2026.
     "week": "CAST(FLOOR(date_diff('day', DATE '2026-09-28', CAST(ts AS DATE)) / 7) AS INTEGER) + 1",
     "payment_method": "payment_method",
+    "bank": "COALESCE(banks.name, 'Unknown bank')",  # null bank_id is its own Segment
 }

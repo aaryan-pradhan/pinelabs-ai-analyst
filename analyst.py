@@ -134,7 +134,7 @@ def ask(question, role, llm, db_path=DB_PATH):
         raise
     return Answer(story["headline"], facts, d,
                   [{k: s[k] for k in ("segment", "mix", "rate")} for s in d["segments"]],
-                  story["hypotheses"], story["recommendations"], dq.check(db_path, weeks))
+                  story["hypotheses"], story["recommendations"], dq.check(db_path, weeks, [overall_sql, seg_sql]))
 
 
 def headline(d, base, current):
