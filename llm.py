@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 MODELS = [  # all ":free" variants; a failed model is skipped, never a paid one
     "nvidia/nemotron-3.5-super-vl:free",
     "inclusionai/ling-3.2-flash:free",
-    "google/gemma-4-31b-it:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
 ]
 CACHE_DIR = Path(__file__).parent / ".llm_cache"
 URL = "https://openrouter.ai/api/v1/chat/completions"

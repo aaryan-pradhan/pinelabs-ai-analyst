@@ -43,7 +43,7 @@ def test_every_model_down_raises_the_free_limit_message(tmp_path):
     with pytest.raises(ModelUnavailable, match="free model limit reached, try again in a minute"):
         complete("p", post, tmp_path)
     assert calls == ["nvidia/nemotron-3.5-super-vl:free", "inclusionai/ling-3.2-flash:free",
-                     "google/gemma-4-31b-it:free"]
+                     "nvidia/nemotron-3-ultra-550b-a55b:free"]
 
 
 def test_identical_prompt_replays_the_saved_response(tmp_path):
