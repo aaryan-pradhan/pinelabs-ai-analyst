@@ -6,7 +6,7 @@ import streamlit as st
 
 import generator
 import llm
-from analyst import WEEKS, AskBack, ask
+from analyst import WEEKS, AskBack, ask, shown
 from validator import ANALYST, Rejected, Role
 
 
@@ -66,19 +66,22 @@ if question:
         st.code(answer.result["sql"], language="sql")
         st.markdown(f"Tables: {', '.join(answer.result['tables'])}")
     else:
-        d = answer.decomposition  # empty for a Settlement gap answer
-        unit = "pp" if d else "%"
+        d = answer.decomposition  # empty for a by-category answer (GMV, Settlement gap)
+        gmv = "gmv" in answer.chart[0]
+        unit = "₹" if gmv else "pp" if d else "%"
         chart = pd.DataFrame(answer.chart).melt(id_vars="segment", var_name="effect", value_name=unit)
-        chart[unit] *= 100
+        if not gmv:
+            chart[unit] *= 100
         title = (f"Mix vs rate effect by {d['dimension'].replace('_', ' ')} "
                  f"(total {d['total'] * 100:+.2f}pp = mix {d['mix'] * 100:+.2f}pp "
                  f"+ rate {d['rate'] * 100:+.2f}pp)" if d
+                 else "GMV by category (successful Attempts, Duplicates removed)" if gmv
                  else "Settlement gap by category (% of successful Attempt value)")
         st.plotly_chart(px.bar(chart, x="segment", y=unit, color="effect", barmode="group", title=title))
 
         st.markdown("### Facts")
         for fact in answer.facts:
-            value = f"{fact.value * 100:.2f}%" if fact.unit == "%" else f"{fact.value * 100:+.2f}pp"
+            value = f"{fact.value * 100:+.2f}pp" if fact.unit == "pp" else shown(fact)
             st.markdown(f"**{fact.label}:** {value}")
             with st.expander("SQL, tables, filters, window"):
                 st.code(fact.sql, language="sql")
