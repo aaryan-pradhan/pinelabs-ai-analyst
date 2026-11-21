@@ -101,17 +101,17 @@ def narrated(story):
 
 
 # Latest complete Week vs the one before (D16); its SQL is shown when the model is down.
-DEFAULT_PLAN = {"metric": "success_rate", "weeks": [7, 8]}
+DEFAULT_PLAN = {"metric": "success_rate", "weeks": [7, 8], "filters": {}}
 
 
 def leads(plan):
     """Lead dimensions worth splitting: a filtered one has a single Segment."""
-    return [d for d in LEADS if d not in plan.get("filters", {})]
+    return [d for d in LEADS if d not in plan["filters"]]
 
 
 def planned_sql(plan):
     """(sql, tables) for the overall query, then one per-Segment query per lead dimension."""
-    return [validate(compile_sql(["attempts", "success_rate"], dims, plan["weeks"], plan.get("filters", {})))
+    return [validate(compile_sql(["attempts", "success_rate"], dims, plan["weeks"], plan["filters"]))
             for dims in [["week"]] + [["week", d] for d in leads(plan)]]
 
 
@@ -123,7 +123,7 @@ def ask(question, role, llm, db_path=DB_PATH):
         raise
     weeks = plan["weeks"]
     base, current = weeks
-    filters = plan.get("filters", {})
+    filters = plan.setdefault("filters", {})
     cited = [f"{k} = {v}" for k, v in filters.items()]
     window = f"wk{base} vs wk{current}"
 
