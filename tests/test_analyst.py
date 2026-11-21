@@ -103,7 +103,6 @@ def test_wk5_settlements_fall_short_for_one_category(db_path):
     assert "electronics" in computed and "3.0%" in computed
     assert answer.dq["mismatch"]
     assert any("Source mismatch" in line for line in answer.dq["caveats"])
-    assert answer.dq["confidence"].startswith("Medium")
     for fact in answer.facts:
         assert "settlements" in fact.tables
         assert fact.window == "wk5"

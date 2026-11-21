@@ -53,7 +53,9 @@ def check(db_path, weeks, sqls, segments):
 
     mismatch = 0  # merchant-days, checked only when the answer reads Settlements
     if any(t.name == "settlements" for tree in trees for t in tree.find_all(exp.Table)):
-        # A missing side counts as 0, so an unsettled merchant-day is a mismatch too.
+        # Checked per merchant-day, the finest grain both sources share; the answer's
+        # per-category gaps can hide one. A missing side counts as 0, so an unsettled
+        # merchant-day is a mismatch too.
         mismatch, days = run(
             f"SELECT COUNT(*) FILTER (WHERE ABS(COALESCE(settled_amount, 0) - COALESCE(amount, 0))"
             f" > {MISMATCH} * COALESCE(amount, 0)), COUNT(*) FROM {SETTLED} WHERE {window}", db_path).iloc[0]
