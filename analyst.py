@@ -103,7 +103,8 @@ def narration_prompt(question, computed_headline, facts):
 
 
 def shown(fact):
-    return f"₹{fact.value:,.2f}" if fact.unit == "₹" else f"{fact.value * 100:.2f}{fact.unit}"
+    # + 0.0 turns a rounded -0.0 into 0.0: a zero's sign is float noise that would change the prompt.
+    return f"₹{fact.value:,.2f}" if fact.unit == "₹" else f"{round(fact.value * 100, 2) + 0.0:.2f}{fact.unit}"
 
 
 def parse(text, fits):

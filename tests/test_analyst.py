@@ -104,6 +104,7 @@ def test_wk5_settlements_fall_short_for_one_category(db_path):
     assert gaps["electronics"] == pytest.approx(-0.03, abs=1e-9)
     computed = prompts[1].split("Computed headline: ")[1].split("\n")[0]
     assert "electronics" in computed and "3.0%" in computed
+    assert "-0.00%" not in prompts[1]  # a zero gap's sign is float noise; it would change the replay key
     assert answer.dq["mismatch"]
     assert any("Source mismatch" in line for line in answer.dq["caveats"])
     for fact in answer.facts:
