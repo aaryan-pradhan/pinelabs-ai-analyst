@@ -37,25 +37,34 @@ question = st.text_input("Ask a question", "Why did success rate drop in week 6?
 if st.session_state.get("asked") != question:  # a new question drops the edited window
     st.session_state.asked, st.session_state.weeks = question, None
 if question:
+    replayed = []  # demo prompts served from the replay cache (D30)
     try:
-        answer = ask(question, role, llm.complete, weeks=st.session_state.weeks)
-    except Rejected as e:
-        st.error(str(e))
-        for sql in e.sql:
+        answer = ask(question, role, llm.with_replay(llm.complete, replayed), weeks=st.session_state.weeks)
+    except (Rejected, AskBack, llm.ModelUnavailable) as e:
+        answer = e  # shown after the banner, since st.stop() drops anything drawn later
+    if replayed:
+        st.info("Replay mode: the free model is unavailable (no key or rate-limited), so this demo "
+                "question replays a cached model reply. Numbers, SQL and charts still come from "
+                "running the pipeline; any cached headline, Hypotheses and Recommendations were "
+                "written with Claude Code during development.")
+    if isinstance(answer, Rejected):
+        st.error(str(answer))
+        for sql in answer.sql:
             st.code(sql, language="sql")
         st.stop()
-    except AskBack as e:
-        st.info(str(e))
+    if isinstance(answer, AskBack):
+        st.info(str(answer))
         st.stop()
-    except llm.ModelUnavailable as e:
-        st.warning(str(e))
+    if isinstance(answer, llm.ModelUnavailable):
+        st.warning(str(answer))
         st.caption("SQL for this question:")
-        for sql in e.sql:
+        for sql in answer.sql:
             st.code(sql, language="sql")
         st.stop()
+    writer = "Claude Code during development" if replayed else "a free model"
     st.subheader(answer.headline)
     if not answer.result:
-        st.caption("Headline written by a free model; only the numbers in Facts come from executed SQL.")
+        st.caption(f"Headline written by {writer}; only the numbers in Facts come from executed SQL.")
 
     chips = dict(zip(answer.assumptions, st.columns(len(answer.assumptions) or 1)))
     if "weeks" in answer.assumptions:
@@ -105,7 +114,7 @@ if question:
         if not items:
             continue
         st.markdown(f"### {title}")
-        st.caption("Model narration from a free model, not evidence. Check against the Facts above.")
+        st.caption(f"Model narration written by {writer}, not evidence. Check against the Facts above.")
         for item in items:
             st.markdown(f"- {item}")
 

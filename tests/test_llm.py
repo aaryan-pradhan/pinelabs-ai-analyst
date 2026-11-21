@@ -95,3 +95,18 @@ def test_the_model_that_answered_is_known_on_replay(tmp_path):
     complete("p", post=post, cache_dir=tmp_path)
     assert llm.answered_by("p", cache_dir=tmp_path) == second
     assert llm.answered_by("never asked", cache_dir=tmp_path) is None
+
+
+def test_a_demo_prompt_the_free_model_cannot_answer_replays_its_cached_reply(tmp_path):
+    demo = tmp_path / "replay.json"
+    demo.write_text('{"demo prompt": "cached reply"}')
+    def no_quota(prompt, check):
+        raise llm.NoQuota("limit")
+    replayed = []
+
+    answer = llm.with_replay(no_quota, replayed, demo)
+    assert answer("demo prompt", llm.accept_any) == "cached reply"
+    assert replayed == ["demo prompt"]  # the app shows the replay banner
+    with pytest.raises(llm.NoQuota, match="limit"):  # not a demo prompt: the original error
+        answer("other prompt", llm.accept_any)
+    assert replayed == ["demo prompt"]

@@ -8,7 +8,7 @@ import pytest
 
 import generator
 from analyst import AskBack, ask
-from llm import ModelUnavailable
+from llm import ModelUnavailable, NoQuota, with_replay
 from validator import ANALYST, Rejected, Role
 
 WK6_PLAN = {"metric": "success_rate", "weeks": [5, 6]}
@@ -355,3 +355,28 @@ def test_ad_hoc_sql_may_order_by_its_own_alias(db_path):
     sql = "SELECT status, COUNT(*) AS n FROM transactions GROUP BY status ORDER BY n DESC"
     rows = ask("Which status is most common?", ANALYST, ad_hoc(sql), db_path).result["rows"]
     assert rows["status"].iloc[0] == "success"
+
+
+def no_model(prompt, check):
+    raise NoQuota("no OpenRouter key set")
+
+
+@pytest.mark.parametrize("question", ["Why did success rate drop in week 6?",
+                                      "Which bank got worse on cards in wk7?", "How's success rate lately?"])
+def test_demo_question_answers_from_the_replay_cache_with_no_model(question, db_path):
+    replayed = []
+    answer = ask(question, ANALYST, with_replay(no_model, replayed), db_path)
+
+    assert len(replayed) == 2  # plan and narration; a miss means the cache is stale
+    assert answer.facts and answer.hypotheses and answer.recommendations
+
+
+def test_demo_merchant_manager_settlements_block_replays_with_no_model(db_path):
+    with pytest.raises(Rejected, match="Merchant manager"):
+        ask("Show me settlements", Role("Merchant manager", "grocery"), with_replay(no_model, []), db_path)
+
+
+def test_demo_duplicates_question_replays_with_no_model(db_path):
+    answer = ask("How many duplicate transactions are there?", ANALYST, with_replay(no_model, []), db_path)
+
+    assert "Duplicates" in answer.dq["caveats"][0]

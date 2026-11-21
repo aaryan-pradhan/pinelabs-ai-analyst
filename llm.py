@@ -15,6 +15,9 @@ MODELS = [  # all ":free" variants; a failed model is skipped, never a paid one
     "nvidia/nemotron-3-ultra-550b-a55b:free",
 ]
 CACHE_DIR = Path(__file__).parent / ".llm_cache"
+# Committed replies for the demo questions' prompts (D4, D34): real free-model plans,
+# narration written with Claude Code during development.
+DEMO_PATH = Path(__file__).parent / "demo" / "replay.json"
 URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
@@ -78,3 +81,19 @@ def complete(prompt, check=accept_any, post=post, cache_dir=CACHE_DIR):
     if unusable:
         raise ModelUnavailable("the free model returned an unusable reply, try rephrasing")
     raise NoQuota("free model limit reached, try again in a minute")
+
+
+def with_replay(complete, replayed, demo_path=DEMO_PATH):
+    """`complete`, except a demo prompt the free model cannot answer replays its cached
+    reply and is appended to `replayed`, so the app can say so (D30)."""
+    demo = json.loads(Path(demo_path).read_text())
+
+    def answer(prompt, check=accept_any):
+        try:
+            return complete(prompt, check)
+        except ModelUnavailable:  # no key, rate-limited, down, or an unusable reply
+            if prompt not in demo:
+                raise
+            replayed.append(prompt)
+            return demo[prompt]
+    return answer
