@@ -24,3 +24,5 @@ videos/*/*
 !videos/*/script.md
 videos/__pycache__/
 video/models/
+!videos/fonts/
+!videos/fonts/*
