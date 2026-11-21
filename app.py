@@ -55,3 +55,8 @@ if question:
         st.caption("Model narration from a free model, not evidence. Check against the Facts above.")
         for item in items:
             st.markdown(f"- {item}")
+
+    st.markdown("### Caveats")
+    st.markdown(f"**Confidence:** {answer.dq['confidence']}")
+    for line in answer.dq["caveats"]:
+        st.markdown(f"- {line}")
