@@ -17,3 +17,9 @@ video/out/
 video/install.log
 video/rec.sh
 video/scout.py
+
+# Manim render cache and outputs; only the scripts are sources
+videos/.cache/
+videos/*/*
+!videos/*/script.md
+videos/__pycache__/
