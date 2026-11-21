@@ -8,6 +8,7 @@ Planted story (c): ~1.5% exact-copy Duplicates and nulls in bank_id, amount and
 failure_reason. Planted story (d): in wk5 electronics merchants' Settlements are
 3% below their successful Attempt value; everywhere else they match exactly.
 """
+import hashlib
 import json
 from pathlib import Path
 
@@ -133,9 +134,15 @@ def build(path, seed=42):
 
 
 def ensure(path):
-    """Build the database from the seed if it is missing."""
-    if not Path(path).exists():
+    """Build the database from the seed if it is missing or an older generator built it.
+
+    A deploy keeps its untracked database across pushes, so existence alone would serve stale data.
+    """
+    path, stamp = Path(path), Path(path).with_suffix(".stamp")
+    source = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    if not path.exists() or not stamp.exists() or stamp.read_text() != source:
         build(path)
+        stamp.write_text(source)
 
 
 EXPECTED_PATH = Path(__file__).parent / "eval" / "expected.json"
