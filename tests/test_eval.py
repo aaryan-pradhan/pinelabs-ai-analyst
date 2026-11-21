@@ -63,3 +63,13 @@ def test_no_quota_stops_the_run(db_path, expected):
 
     with pytest.raises(llm.NoQuota):
         evaluate.run(spent, db_path, expected)
+
+
+def test_readme_quotes_the_committed_eval_result():
+    result = json.loads(evaluate.RESULT_PATH.read_text())
+    readme = (evaluate.RESULT_PATH.parent.parent / "README.md").read_text()
+
+    assert f"**{result['passed']}/{result['total']}**" in readme
+    assert result["date"] in readme
+    assert all(f"`{m}`" in readme for m in result["models"])
+    assert all(r["question"] in readme for r in result["results"])
