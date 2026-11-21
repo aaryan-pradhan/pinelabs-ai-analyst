@@ -2,7 +2,9 @@
 
 8 Weeks, Mon 28 Sep - Sun 22 Nov 2026. Planted story (a): in wk6 a
 festive-sale merchant pushes extra traffic to netbanking and wallet, so the
-overall Success rate falls while every payment method stays flat.
+overall Success rate falls while every payment method stays flat. Planted
+story (c): ~1.5% exact-copy Duplicates and nulls in bank_id, amount and
+failure_reason.
 """
 from pathlib import Path
 
@@ -36,6 +38,9 @@ BANKS = [("Arya Bank", "public"), ("Bharat National Bank", "public"),
 FAILURE_REASONS = ["insufficient_funds", "bank_timeout", "authentication_failed",
                    "risk_declined", "technical_error"]
 N_MERCHANTS = 300
+DUPLICATES = 0.015  # share of Attempts copied once more
+NULL_BANK, NULL_AMOUNT = 0.02, 0.015  # share of Attempts
+NULL_REASON = 0.03  # share of failed Attempts
 DB_PATH = Path(__file__).parent / "payments.duckdb"
 
 
@@ -87,19 +92,30 @@ def build(path, seed=42):
     tx["status"] = np.where(success, "success", "failed")
     tx["failure_reason"] = np.where(success, None, rng.choice(FAILURE_REASONS, n))
 
+    # Story (c): nulls in bank_id, amount and failed Attempts' failure_reason.
+    tx["bank_id"] = tx["bank_id"].astype("Int64")
+    tx["amount"] = tx["amount"].astype("Float64")
+    tx.loc[rng.random(n) < NULL_BANK, "bank_id"] = pd.NA
+    tx.loc[rng.random(n) < NULL_AMOUNT, "amount"] = pd.NA
+    tx.loc[~success & (rng.random(n) < NULL_REASON), "failure_reason"] = None
+
     tx = tx.sort_values("ts", kind="stable").reset_index(drop=True)
     tx.insert(0, "txn_id", np.arange(1, n + 1))
+
+    # Story (c): exact-copy Duplicates. Settlements are built from Attempts, without them.
+    dup = rng.choice(n, round(n * DUPLICATES), replace=False)
+    with_dups = pd.concat([tx, tx.iloc[dup]]).sort_values("txn_id", kind="stable")
 
     path = Path(path)
     path.unlink(missing_ok=True)
     con = duckdb.connect(str(path))
-    for name, df in [("transactions", tx), ("merchants", merchants), ("banks", banks)]:
+    for name, df in [("transactions", with_dups), ("merchants", merchants), ("banks", banks)]:
         con.execute(f"CREATE TABLE {name} AS SELECT * FROM df")
     con.execute("""
         CREATE TABLE settlements AS
         SELECT merchant_id, CAST(ts AS DATE) AS date,
                SUM(amount) AS settled_amount, COUNT(*) AS settled_count
-        FROM transactions WHERE status = 'success'
+        FROM tx WHERE status = 'success'
         GROUP BY 1, 2 ORDER BY 1, 2
     """)
     con.close()

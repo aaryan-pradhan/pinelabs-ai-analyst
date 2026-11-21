@@ -23,6 +23,26 @@ def test_story_a_wk6_overall_drop_with_every_method_flat(con):
         assert abs(change) <= 0.003, method
 
 
+def test_story_c_duplicates_and_nulls(con):
+    rows, ids, distinct_rows = con.execute(
+        "SELECT COUNT(*), COUNT(DISTINCT txn_id), (SELECT COUNT(*) FROM (SELECT DISTINCT * FROM transactions))"
+        " FROM transactions").fetchone()
+    assert 0.014 < (rows - ids) / rows < 0.016
+    assert distinct_rows == ids  # every Duplicate is an exact copy
+
+    bank, amount, reason, success_reason = con.execute("""
+        SELECT AVG(CASE WHEN bank_id IS NULL THEN 1.0 ELSE 0.0 END),
+               AVG(CASE WHEN amount IS NULL THEN 1.0 ELSE 0.0 END),
+               AVG(CASE WHEN failure_reason IS NULL THEN 1.0 ELSE 0.0 END) FILTER (WHERE status = 'failed'),
+               COUNT(failure_reason) FILTER (WHERE status = 'success')
+        FROM (SELECT DISTINCT * FROM transactions)
+    """).fetchone()
+    assert 0.015 < bank < 0.025
+    assert 0.01 < amount < 0.02
+    assert 0.02 < reason < 0.04
+    assert success_reason == 0
+
+
 def test_same_seed_reproduces_identical_data(db_path, tmp_path):
     again = tmp_path / "again.duckdb"
     generator.build(again)
