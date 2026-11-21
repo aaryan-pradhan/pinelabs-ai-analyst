@@ -30,6 +30,10 @@ _Avoid_: Volume, TPV, revenue
 GMV divided by the number of successful Attempts with a known amount.
 _Avoid_: AOV, basket size
 
+**Failure share**:
+A failure reason's failed Attempts divided by all failed Attempts in the same Week. Failed Attempts with no reason count as "Unknown reason".
+_Avoid_: Decline mix, error rate
+
 **Settlement**:
 The gross amount paid out to a merchant for the successful Attempts of one transaction date. There are no fees.
 _Avoid_: Payout, settled value

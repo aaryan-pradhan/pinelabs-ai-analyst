@@ -1,6 +1,8 @@
 """Seam 1: the analyst, driven with a fake LLM that returns a fixed plan."""
 import json
+import shutil
 
+import duckdb
 import pytest
 
 from analyst import ask
@@ -67,6 +69,64 @@ def test_model_narrates_but_facts_come_only_from_executed_sql(db_path, con):
             assert fact.value in (rate[6] - rate[5]).to_numpy()
 
 
+WEEK = "CAST(FLOOR(date_diff('day', DATE '2026-09-28', CAST(ts AS DATE)) / 7) AS INTEGER) + 1"
+
+
+def test_duplicates_are_counted_exactly_and_excluded(db_path, con):
+    answer = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), db_path)
+
+    rows, attempts = con.execute(
+        f"SELECT COUNT(*), COUNT(DISTINCT txn_id) FROM transactions WHERE {WEEK} IN (5, 6)").fetchone()
+    assert answer.dq["duplicates"] == rows - attempts > 0
+    assert any(f"{rows - attempts:,} Duplicates" in line for line in answer.dq["caveats"])
+    overall = con.execute(answer.facts[0].sql).df()
+    assert overall["attempts"].sum() == attempts
+
+
+def test_unknown_bank_segment_keeps_totals_and_null_caveat_fires(db_path, con):
+    plan = {"metric": "success_rate", "dimensions": ["bank"], "weeks": [5, 6]}
+    answer = ask("Did any bank get worse in week 6?", "analyst", fake_llm(plan), db_path)
+
+    assert "Unknown bank" in {row["segment"] for row in answer.chart}
+    overall = con.execute(answer.facts[0].sql).df().set_index("week")["attempts"]
+    by_bank = con.execute(answer.facts[-1].sql).df().groupby("week")["attempts"].sum()
+    assert (by_bank == overall).all()
+    assert any("bank_id" in line and "Unknown bank" in line for line in answer.dq["caveats"])
+
+    wk6 = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), db_path)
+    assert not any("bank_id" in line for line in wk6.dq["caveats"])  # only columns the answer uses
+
+
+def edited_copy(db_path, tmp_path, sql):
+    """A copy of the database with `sql` applied."""
+    path = tmp_path / "edited.duckdb"
+    shutil.copy(db_path, path)
+    with duckdb.connect(str(path)) as c:
+        c.execute(sql)
+    return path
+
+
+def test_segment_under_200_attempts_is_low_confidence(db_path, tmp_path):
+    thin = edited_copy(db_path, tmp_path, f"DELETE FROM transactions WHERE payment_method = 'wallet'"
+                                          f" AND {WEEK} = 5 AND txn_id % 10 <> 0")
+    answer = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), thin)
+
+    assert any("wallet" in line and "200 Attempts" in line for line in answer.dq["caveats"])
+    assert answer.dq["confidence"].startswith("Low")
+
+    clean = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), db_path)
+    assert clean.dq["confidence"].startswith("High")
+
+
+def test_missing_day_is_a_coverage_gap(db_path, tmp_path):
+    gap = edited_copy(db_path, tmp_path, "DELETE FROM transactions WHERE CAST(ts AS DATE) = DATE '2026-10-29'")
+    answer = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), gap)
+
+    assert any("2026-10-29" in line for line in answer.dq["caveats"])
+    clean = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), db_path)
+    assert not any("coverage" in line.lower() for line in clean.dq["caveats"])
+
+
 def down(prompt, check):
     raise ModelUnavailable("free model limit reached, try again in a minute")
 
@@ -97,6 +157,13 @@ def test_unusable_plan_from_the_model_is_refused_not_run(db_path):
     with pytest.raises(ModelUnavailable, match="unusable reply") as err:
         ask("Why did success rate drop in week 6?", "analyst", fake_llm(real_reply), db_path)
     assert all("IN (7, 8)" in s for s in err.value.sql)
+
+
+def test_plan_for_a_metric_the_analyst_cannot_answer_is_refused(db_path):
+    gmv = {"metric": "gmv", "dimensions": ["payment_method"], "weeks": [7, 8]}
+
+    with pytest.raises(ModelUnavailable, match="unusable reply"):
+        ask("What was GMV by payment method in week 8?", "analyst", fake_llm(gmv), db_path)
 
 
 def test_narration_that_is_not_json_is_refused_with_the_executed_sql(db_path):

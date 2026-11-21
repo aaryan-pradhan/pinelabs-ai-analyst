@@ -8,10 +8,11 @@ from dataclasses import dataclass
 
 from compiler import compile_sql
 from decomposition import decompose
+import dq
 from executor import run
 from generator import DB_PATH
 from llm import ModelUnavailable
-from semantic import DIMENSIONS, METRICS
+from semantic import DIMENSIONS
 from validator import validate
 
 
@@ -34,9 +35,13 @@ class Answer:
     chart: list
     hypotheses: list  # model narration, not evidence
     recommendations: list  # model narration, not evidence
+    dq: dict  # data-quality numbers, caveats and confidence
 
 
-SPLITS = [d for d in DIMENSIONS if d != "week"]  # weeks are chosen separately
+# ask() answers with a Success rate decomposition only; other metrics stay in the
+# semantic layer until an answer shape exists for them.
+ANSWERED = ["success_rate"]
+SPLITS = [d for d in DIMENSIONS if d not in ("week", "failure_reason")]  # weeks are chosen separately
 WEEKS = range(1, 9)  # wk1 = 28 Sep 2026 ... wk8 = 16-22 Nov 2026
 
 
@@ -45,14 +50,14 @@ def plan_prompt(question):
         "Choose a plan for the question from the semantic layer. Reply with JSON only, e.g.\n"
         '{"metric": "success_rate", "dimensions": ["payment_method"], "weeks": [5, 6]}\n'
         "weeks is [base week, current week] as integers 1-8 (wk8 is the latest).\n"
-        f"Metrics: {', '.join(METRICS)}\nDimensions: {', '.join(SPLITS)}\n"
+        f"Metrics: {', '.join(ANSWERED)}\nDimensions: {', '.join(SPLITS)}\n"
         f"Question: {question}"
     )
 
 
 def usable(plan):
     weeks = plan.get("weeks")
-    return (plan.get("metric") in METRICS and plan.get("dimensions")
+    return (plan.get("metric") in ANSWERED and plan.get("dimensions")
             and set(plan["dimensions"]) <= set(SPLITS)
             and isinstance(weeks, list) and len(weeks) == 2
             and all(type(w) is int and w in WEEKS for w in weeks))
@@ -132,7 +137,7 @@ def ask(question, role, llm, db_path=DB_PATH):
         raise
     return Answer(story["headline"], facts, d,
                   [{k: s[k] for k in ("segment", "mix", "rate")} for s in d["segments"]],
-                  story["hypotheses"], story["recommendations"])
+                  story["hypotheses"], story["recommendations"], dq.check(db_path, weeks, [overall_sql, seg_sql], by_week))
 
 
 def headline(d, base, current):
