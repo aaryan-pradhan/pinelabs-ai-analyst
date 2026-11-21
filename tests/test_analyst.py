@@ -267,3 +267,14 @@ def test_merchant_manager_is_scoped_to_their_category(db_path, con):
     for fact in answer.facts:
         assert "merchants.category = 'grocery'" in fact.sql
         assert "category = grocery" in fact.filters
+
+
+def test_merchant_manager_naming_another_category_is_blocked(db_path):
+    plan = {**WK6_PLAN, "filters": {"category": "electronics"}}
+
+    with pytest.raises(Rejected, match="Merchant manager for grocery cannot see electronics"):
+        ask("Why did electronics success rate drop in week 6?", GROCERY, fake_llm(plan), db_path)
+    own = ask("Why did grocery success rate drop in week 6?", GROCERY,
+              fake_llm({**WK6_PLAN, "filters": {"category": "grocery"}}), db_path)
+    assert "scope" not in own.assumptions  # the question named the category
+    assert all(f.sql.count("merchants.category = 'grocery'") == 1 for f in own.facts)
