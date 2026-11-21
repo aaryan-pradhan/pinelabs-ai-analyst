@@ -29,7 +29,7 @@ METHODS = {
 }
 FESTIVE_METHODS = {"netbanking": 0.55, "wallet": 0.45}
 DROP_BANK, DROP_RATE = 3, 0.78  # story (b): Coastal Bank's card rate in wk7
-SHORT_CATEGORY, SHORT_BY = "electronics", 0.03  # story (d): wk5 Settlements short
+SHORT_CATEGORY, SHORT_WEEK, SHORT_BY = "electronics", 5, 0.03  # story (d): wk5 Settlements 3% short
 
 CATEGORIES = ["grocery", "electronics", "fashion", "travel", "food_delivery", "fuel"]
 CITIES = ["Mumbai", "Delhi", "Bengaluru", "Chennai", "Hyderabad",
@@ -122,7 +122,7 @@ def build(path, seed=42):
         CREATE TABLE settlements AS
         SELECT merchant_id, CAST(ts AS DATE) AS date,
                SUM(amount) * CASE WHEN category = '{SHORT_CATEGORY}'
-                                   AND date_diff('day', DATE '{START.date()}', CAST(ts AS DATE)) // 7 = 4
+                                   AND date_diff('day', DATE '{START.date()}', CAST(ts AS DATE)) // 7 + 1 = {SHORT_WEEK}
                                   THEN {1 - SHORT_BY} ELSE 1 END AS settled_amount,
                COUNT(*) AS settled_count
         FROM tx JOIN merchants USING (merchant_id) WHERE status = 'success'
