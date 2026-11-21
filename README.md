@@ -291,3 +291,7 @@ when no sensible default exists.
    points at the exact missing Settlements.
 6. Alerts: run the Week-over-Week question on a schedule and post the card when
    the Success rate moves.
+
+---
+
+Made by Aaryan with love.
