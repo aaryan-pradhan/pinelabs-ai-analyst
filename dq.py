@@ -6,6 +6,7 @@ from executor import run
 from semantic import ATTEMPTS, DIMENSIONS
 
 NULL_LIMIT = 0.01  # caveat above this null rate
+MIN_ATTEMPTS = 200  # a Segment below this in any Week is low-confidence
 
 # Nullable key column: (rows it is measured on, what the answer does with a null).
 NULLABLE = {
@@ -13,9 +14,10 @@ NULLABLE = {
 }
 
 
-def check(db_path, weeks, sqls):
-    """{"duplicates": n, "nulls": {column: rate}, "caveats": [line]} for the
-    Attempts in `weeks`, checking only the nullable columns `sqls` use."""
+def check(db_path, weeks, sqls, segments):
+    """{"duplicates", "nulls", "low_confidence", "caveats", "confidence"} for the
+    Attempts in `weeks`, checking only the nullable columns `sqls` use.
+    `segments` is {week: {Segment: (attempts, rate)}}."""
     window = f"{DIMENSIONS['week']} IN ({', '.join(str(int(w)) for w in weeks)})"
     rows, attempts = run(
         f"SELECT COUNT(*) AS n, COUNT(DISTINCT txn_id) AS a FROM transactions WHERE {window}",
@@ -34,4 +36,14 @@ def check(db_path, weeks, sqls):
         if rate > NULL_LIMIT:
             _, rows_label, effect = NULLABLE[c]
             caveats.append(f"`{c}` is missing on {rate:.1%} of {rows_label}; they are {effect}.")
-    return {"duplicates": dupes, "nulls": nulls, "caveats": caveats}
+    low = sorted({f"{seg} in wk{w} ({a:,})" for w, segs in segments.items()
+                  for seg, (a, _) in segs.items() if a < MIN_ATTEMPTS})
+    if low:
+        caveats.append(f"Under {MIN_ATTEMPTS} Attempts, so low-confidence: {'; '.join(low)}.")
+        confidence = "Low: some Segments are too small to trust their rates."
+    elif len(caveats) > 1:
+        confidence = "Medium: read the Caveats before acting."
+    else:
+        confidence = "High: no data-quality issues beyond the excluded Duplicates."
+    return {"duplicates": dupes, "nulls": nulls, "low_confidence": low,
+            "caveats": caveats, "confidence": confidence}

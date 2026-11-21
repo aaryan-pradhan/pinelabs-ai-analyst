@@ -1,6 +1,8 @@
 """Seam 1: the analyst, driven with a fake LLM that returns a fixed plan."""
 import json
+import shutil
 
+import duckdb
 import pytest
 
 from analyst import ask
@@ -93,6 +95,27 @@ def test_unknown_bank_segment_keeps_totals_and_null_caveat_fires(db_path, con):
 
     wk6 = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), db_path)
     assert not any("bank_id" in line for line in wk6.dq["caveats"])  # only columns the answer uses
+
+
+def edited_copy(db_path, tmp_path, sql):
+    """A copy of the database with `sql` applied."""
+    path = tmp_path / "edited.duckdb"
+    shutil.copy(db_path, path)
+    with duckdb.connect(str(path)) as c:
+        c.execute(sql)
+    return path
+
+
+def test_segment_under_200_attempts_is_low_confidence(db_path, tmp_path):
+    thin = edited_copy(db_path, tmp_path, f"DELETE FROM transactions WHERE payment_method = 'wallet'"
+                                          f" AND {WEEK} = 5 AND txn_id % 10 <> 0")
+    answer = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), thin)
+
+    assert any("wallet" in line and "200 Attempts" in line for line in answer.dq["caveats"])
+    assert answer.dq["confidence"].startswith("Low")
+
+    clean = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), db_path)
+    assert clean.dq["confidence"].startswith("High")
 
 
 def down(prompt, check):
