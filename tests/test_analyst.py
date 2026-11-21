@@ -276,7 +276,7 @@ def test_merchant_manager_naming_another_category_is_blocked(db_path):
         ask("Why did electronics success rate drop in week 6?", GROCERY, fake_llm(plan), db_path)
     own = ask("Why did grocery success rate drop in week 6?", GROCERY,
               fake_llm({**WK6_PLAN, "filters": {"category": "grocery"}}), db_path)
-    assert "scope" not in own.assumptions  # the question named the category
+    assert own.assumptions["scope"] == "grocery"  # shown even when the question named it
     assert all(f.sql.count("merchants.category = 'grocery'") == 1 for f in own.facts)
 
 

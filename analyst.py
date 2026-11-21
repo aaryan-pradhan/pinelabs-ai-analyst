@@ -152,8 +152,9 @@ def ask(question, role, llm, db_path=DB_PATH, weeks=None):
     assumptions["denominator"] = "all Attempts excluding Duplicates"  # D19
     base, current = weeks
     filters = plan.setdefault("filters", {})
-    if role.category is not None and "category" not in filters:  # the validator adds it anyway
-        filters["category"] = assumptions["scope"] = role.category
+    if role.category is not None:  # the validator scopes the SQL anyway
+        filters.setdefault("category", role.category)
+        assumptions["scope"] = role.category
     cited = [f"{k} = {v}" for k, v in filters.items()]
     window = f"wk{base} vs wk{current}"
 
