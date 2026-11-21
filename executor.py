@@ -1,4 +1,5 @@
 """Run validated SQL on a read-only DuckDB connection."""
+import functools
 import threading
 
 import duckdb
@@ -8,6 +9,11 @@ from validator import Rejected
 TIMEOUT = 5  # seconds (D28)
 
 
+# Cached per (SQL, role) (D28): validated SQL already carries the role's category scope,
+# so the SQL alone tells roles apart. A failed or cut-off query raises and is not cached.
+# ponytail: callers share the cached DataFrame, so none may change it in place; the data is a
+# fixed seed, so entries never expire. Copy on return / clear on rebuild if either changes.
+@functools.lru_cache(maxsize=512)
 def run(sql, db_path, timeout=TIMEOUT):
     # No file or network access: model-written SQL could otherwise call read_text().
     # Set after connect, not as connect config, so other connections to the file still open.
