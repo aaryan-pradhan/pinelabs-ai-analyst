@@ -8,6 +8,7 @@ import pytest
 
 from analyst import AskBack, ask
 from llm import ModelUnavailable
+from validator import ANALYST, Rejected, Role
 
 WK6_PLAN = {"metric": "success_rate", "weeks": [5, 6]}
 WK7_CARD_PLAN = {"metric": "success_rate", "weeks": [6, 7], "filters": {"payment_method": "card"}}
@@ -29,7 +30,7 @@ def fake_llm(plan, prompts=None):
 
 def test_wk6_drop_is_a_mix_shift(db_path):
     prompts = []
-    answer = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN, prompts), db_path)
+    answer = ask("Why did success rate drop in week 6?", ANALYST, fake_llm(WK6_PLAN, prompts), db_path)
 
     d = answer.decomposition
     assert d["dimension"] == "payment_method"
@@ -50,7 +51,7 @@ def test_wk6_drop_is_a_mix_shift(db_path):
 
 def test_wk7_card_drop_names_the_bank_that_got_worse(db_path):
     prompts = []
-    answer = ask("Which bank got worse on cards in week 7?", "analyst", fake_llm(WK7_CARD_PLAN, prompts), db_path)
+    answer = ask("Which bank got worse on cards in week 7?", ANALYST, fake_llm(WK7_CARD_PLAN, prompts), db_path)
 
     d = answer.decomposition
     assert d["dimension"] == "bank"
@@ -76,7 +77,7 @@ def test_model_narrates_but_facts_come_only_from_executed_sql(db_path, con):
     }
     replies = iter([json.dumps(WK6_PLAN), json.dumps(narration)])
 
-    answer = ask("Why did success rate drop in week 6?", "analyst", lambda prompt, check: next(replies), db_path)
+    answer = ask("Why did success rate drop in week 6?", ANALYST, lambda prompt, check: next(replies), db_path)
 
     assert answer.headline == "Success rate fell 99pp in week 6"
     assert answer.hypotheses == ["Festive sale pushed traffic to netbanking"]
@@ -94,7 +95,7 @@ def test_model_narrates_but_facts_come_only_from_executed_sql(db_path, con):
 def test_wk5_settlements_fall_short_for_one_category(db_path):
     prompts = []
     plan = {"metric": "settlement_gap", "weeks": [5]}
-    answer = ask("Do settlements match transactions in week 5?", "analyst", fake_llm(plan, prompts), db_path)
+    answer = ask("Do settlements match transactions in week 5?", ANALYST, fake_llm(plan, prompts), db_path)
 
     gaps = {row["segment"]: row["gap"] for row in answer.chart}
     assert len(gaps) == 6  # every category
@@ -113,7 +114,7 @@ WEEK = "CAST(FLOOR(date_diff('day', DATE '2026-09-28', CAST(ts AS DATE)) / 7) AS
 
 
 def test_duplicates_are_counted_exactly_and_excluded(db_path, con):
-    answer = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), db_path)
+    answer = ask("Why did success rate drop in week 6?", ANALYST, fake_llm(WK6_PLAN), db_path)
 
     rows, attempts = con.execute(
         f"SELECT COUNT(*), COUNT(DISTINCT txn_id) FROM transactions WHERE {WEEK} IN (5, 6)").fetchone()
@@ -124,7 +125,7 @@ def test_duplicates_are_counted_exactly_and_excluded(db_path, con):
 
 
 def test_unknown_bank_segment_keeps_totals_and_null_caveat_fires(db_path, con):
-    answer = ask("Which bank got worse on cards in week 7?", "analyst", fake_llm(WK7_CARD_PLAN), db_path)
+    answer = ask("Which bank got worse on cards in week 7?", ANALYST, fake_llm(WK7_CARD_PLAN), db_path)
 
     assert "Unknown bank" in {row["segment"] for row in answer.chart}
     overall = con.execute(answer.facts[0].sql).df().set_index("week")["attempts"]
@@ -132,7 +133,7 @@ def test_unknown_bank_segment_keeps_totals_and_null_caveat_fires(db_path, con):
     assert (by_bank == overall).all()
     assert any("bank_id" in line and "Unknown bank" in line for line in answer.dq["caveats"])
 
-    wk6 = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), db_path)
+    wk6 = ask("Why did success rate drop in week 6?", ANALYST, fake_llm(WK6_PLAN), db_path)
     assert not any("bank_id" in line for line in wk6.dq["caveats"])  # only columns the answer uses
 
 
@@ -148,21 +149,21 @@ def edited_copy(db_path, tmp_path, sql):
 def test_segment_under_200_attempts_is_low_confidence(db_path, tmp_path):
     thin = edited_copy(db_path, tmp_path, f"DELETE FROM transactions WHERE payment_method = 'wallet'"
                                           f" AND {WEEK} = 5 AND txn_id % 10 <> 0")
-    answer = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), thin)
+    answer = ask("Why did success rate drop in week 6?", ANALYST, fake_llm(WK6_PLAN), thin)
 
     assert any("wallet" in line and "200 Attempts" in line for line in answer.dq["caveats"])
     assert answer.dq["confidence"].startswith("Low")
 
-    clean = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), db_path)
+    clean = ask("Why did success rate drop in week 6?", ANALYST, fake_llm(WK6_PLAN), db_path)
     assert clean.dq["confidence"].startswith("High")
 
 
 def test_missing_day_is_a_coverage_gap(db_path, tmp_path):
     gap = edited_copy(db_path, tmp_path, "DELETE FROM transactions WHERE CAST(ts AS DATE) = DATE '2026-10-29'")
-    answer = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), gap)
+    answer = ask("Why did success rate drop in week 6?", ANALYST, fake_llm(WK6_PLAN), gap)
 
     assert any("2026-10-29" in line for line in answer.dq["caveats"])
-    clean = ask("Why did success rate drop in week 6?", "analyst", fake_llm(WK6_PLAN), db_path)
+    clean = ask("Why did success rate drop in week 6?", ANALYST, fake_llm(WK6_PLAN), db_path)
     assert not any("coverage" in line.lower() for line in clean.dq["caveats"])
 
 
@@ -177,14 +178,14 @@ def test_model_down_after_planning_carries_the_planned_sql(db_path):
         return next(replies, None) or down(prompt, check)
 
     with pytest.raises(ModelUnavailable) as err:
-        ask("Why did success rate drop in week 6?", "analyst", llm, db_path)
+        ask("Why did success rate drop in week 6?", ANALYST, llm, db_path)
     assert err.value.sql
     assert all(s.startswith("SELECT") and "IN (5, 6)" in s for s in err.value.sql)
 
 
 def test_model_down_before_planning_carries_the_default_plan_sql(db_path):
     with pytest.raises(ModelUnavailable) as err:
-        ask("How are payments doing lately?", "analyst", down, db_path)
+        ask("How are payments doing lately?", ANALYST, down, db_path)
     assert err.value.sql
     assert all(s.startswith("SELECT") and "IN (7, 8)" in s for s in err.value.sql)
 
@@ -194,7 +195,7 @@ def test_unusable_plan_from_the_model_is_refused_not_run(db_path):
                   "weeks": ["week_5", "week_6"]}  # nemotron, 21 Nov
 
     with pytest.raises(ModelUnavailable, match="unusable reply") as err:
-        ask("Why did success rate drop in week 6?", "analyst", fake_llm(real_reply), db_path)
+        ask("Why did success rate drop in week 6?", ANALYST, fake_llm(real_reply), db_path)
     assert all("IN (7, 8)" in s for s in err.value.sql)
 
 
@@ -202,14 +203,14 @@ def test_plan_for_a_metric_the_analyst_cannot_answer_is_refused(db_path):
     gmv = {"metric": "gmv", "dimensions": ["payment_method"], "weeks": [7, 8]}
 
     with pytest.raises(ModelUnavailable, match="unusable reply"):
-        ask("What was GMV by payment method in week 8?", "analyst", fake_llm(gmv), db_path)
+        ask("What was GMV by payment method in week 8?", ANALYST, fake_llm(gmv), db_path)
 
 
 def test_narration_that_is_not_json_is_refused_with_the_executed_sql(db_path):
     replies = iter([json.dumps(WK6_PLAN), "Sorry, I can't help with that."])
 
     with pytest.raises(ModelUnavailable, match="unusable") as err:
-        ask("Why did success rate drop in week 6?", "analyst", lambda prompt, check: next(replies), db_path)
+        ask("Why did success rate drop in week 6?", ANALYST, lambda prompt, check: next(replies), db_path)
     assert all("IN (5, 6)" in s for s in err.value.sql)
 
 
@@ -217,21 +218,21 @@ def test_filter_that_matches_no_attempts_is_refused_with_its_sql(db_path):
     plan = {"metric": "success_rate", "weeks": [6, 7], "filters": {"payment_method": "Cards' OR '1'='1"}}
 
     with pytest.raises(ModelUnavailable, match="No Attempts match") as err:
-        ask("Which bank got worse on cards in week 7?", "analyst", fake_llm(plan), db_path)
+        ask("Which bank got worse on cards in week 7?", ANALYST, fake_llm(plan), db_path)
     assert all("Cards'' OR ''1''=''1'" in s for s in err.value.sql)
 
 
 def test_vague_question_defaults_to_latest_weeks_and_all_attempts(db_path):
-    answer = ask("How's success rate lately?", "analyst", fake_llm({"metric": "success_rate"}), db_path)
+    answer = ask("How's success rate lately?", ANALYST, fake_llm({"metric": "success_rate"}), db_path)
 
     assert answer.assumptions == {"weeks": [7, 8], "denominator": "all Attempts excluding Duplicates"}
     assert all(fact.window == "wk7 vs wk8" for fact in answer.facts)
-    null = ask("How's success rate lately?", "analyst", fake_llm({"metric": "success_rate", "weeks": None}), db_path)
+    null = ask("How's success rate lately?", ANALYST, fake_llm({"metric": "success_rate", "weeks": None}), db_path)
     assert null.assumptions["weeks"] == [7, 8]  # a null window is no window
 
 
 def test_edited_window_reruns_for_the_edited_weeks(db_path):
-    answer = ask("How's success rate lately?", "analyst", fake_llm({"metric": "success_rate"}), db_path,
+    answer = ask("How's success rate lately?", ANALYST, fake_llm({"metric": "success_rate"}), db_path,
                  weeks=[5, 6])
 
     assert answer.assumptions["weeks"] == [5, 6]
@@ -244,6 +245,25 @@ def test_question_with_no_sensible_default_is_asked_back(db_path):
     back = {"ask": "Which metric do you mean: Success rate or Settlement gap?"}
 
     with pytest.raises(AskBack, match="Which metric do you mean"):
-        ask("How are things?", "analyst", fake_llm(back), db_path)
+        ask("How are things?", ANALYST, fake_llm(back), db_path)
     with pytest.raises(ModelUnavailable, match="unusable reply"):  # nothing to ask the user
-        ask("How are things?", "analyst", fake_llm({"ask": " "}), db_path)
+        ask("How are things?", ANALYST, fake_llm({"ask": " "}), db_path)
+
+
+GROCERY = Role("Merchant manager", "grocery")
+
+
+def test_merchant_manager_is_scoped_to_their_category(db_path, con):
+    answer = ask("Why did success rate drop in week 6?", GROCERY, fake_llm(WK6_PLAN), db_path)
+
+    assert answer.assumptions["scope"] == "grocery"
+    expected = dict(con.execute(
+        f"SELECT {WEEK}, AVG(CASE WHEN status = 'success' THEN 1.0 ELSE 0.0 END)"
+        " FROM (SELECT DISTINCT ON (txn_id) * FROM transactions) JOIN merchants USING (merchant_id)"
+        f" WHERE category = 'grocery' AND {WEEK} IN (5, 6) GROUP BY 1").fetchall())
+    rates = {f.label: f.value for f in answer.facts if f.unit == "%"}
+    assert rates == pytest.approx({"Success rate wk5": expected[5], "Success rate wk6": expected[6]})
+    assert answer.decomposition["dimension"] != "category"  # one Segment explains nothing
+    for fact in answer.facts:
+        assert "merchants.category = 'grocery'" in fact.sql
+        assert "category = grocery" in fact.filters
