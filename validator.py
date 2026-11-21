@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import sqlglot
 from sqlglot import exp
 
-from semantic import JOINS, TABLES
+from semantic import ATTEMPTS, JOINS, TABLES
 
 ROW_LIMIT = 10000
 
@@ -18,6 +18,7 @@ class Role:
 
 
 ANALYST = Role("Analyst")
+ATTEMPTS_FROM = sqlglot.parse_one(f"SELECT * FROM {ATTEMPTS}", read="duckdb").args["from_"]
 
 
 class Rejected(Exception):
@@ -72,8 +73,12 @@ def scoped(tree, tables, role):
     """`tree` limited to the role's category, joining merchants if it is not joined."""
     if "settlements" in tables:
         raise Rejected(f"A {role.name} cannot see Settlements; only an Analyst can.")
-    # ponytail: scopes the outer query only; safe because SQL comes from the compiler,
-    # whose one subquery is the unfiltered Attempts source. Scope subqueries if plans ever nest.
+    # The scope is ANDed on the outer query only, so the one subquery allowed is the
+    # compiler's Attempts source in FROM; any other could read every category.
+    # ponytail: refuses all other subqueries; scope each nested SELECT if managers need them.
+    nested = [q for q in tree.find_all(exp.Select) if q is not tree]
+    if nested and (len(nested) > 1 or tree.args.get("from_") != ATTEMPTS_FROM):
+        raise Rejected(f"A {role.name} query may not use subqueries; the category scope covers the outer query only.")
     named = {eq.expression.name for eq in tree.find_all(exp.EQ)
              if isinstance(eq.this, exp.Column) and eq.this.name == "category"}
     others = sorted(n for n in named if n.lower() != role.category.lower())
