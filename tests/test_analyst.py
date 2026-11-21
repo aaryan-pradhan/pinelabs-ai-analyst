@@ -310,9 +310,10 @@ def ad_hoc(sql):
 def test_destructive_request_is_rejected_as_not_a_select(db_path, con):
     failed = con.execute("SELECT COUNT(*) FROM transactions WHERE status = 'failed'").fetchone()[0]
 
-    with pytest.raises(Rejected, match="Only a single SELECT"):
-        ask("Delete the failed transactions", ANALYST,
-            ad_hoc("DELETE FROM transactions WHERE status = 'failed'"), db_path)
+    delete = "DELETE FROM transactions WHERE status = 'failed'"
+    with pytest.raises(Rejected, match="Only a single SELECT") as refused:
+        ask("Delete the failed transactions", ANALYST, ad_hoc(delete), db_path)
+    assert refused.value.sql == [delete]  # shown on the card beside the reason
     assert con.execute("SELECT COUNT(*) FROM transactions WHERE status = 'failed'").fetchone()[0] == failed
 
 

@@ -23,6 +23,7 @@ ATTEMPTS_FROM = sqlglot.parse_one(f"SELECT * FROM {ATTEMPTS}", read="duckdb").ar
 
 class Rejected(Exception):
     """A query the validator refused; the message is the human-readable reason."""
+    sql = ()  # the refused SQL, shown with the reason
 
 
 def validate(sql, role=ANALYST):

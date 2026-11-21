@@ -13,7 +13,7 @@ from executor import run
 from generator import DB_PATH
 from llm import ModelUnavailable
 from semantic import DIMENSIONS, TABLES
-from validator import validate
+from validator import Rejected, validate
 
 
 @dataclass
@@ -201,13 +201,18 @@ def ask(question, role, llm, db_path=DB_PATH, weeks=None):
 
 def ad_hoc_answer(sql, role, db_path):
     """Model-written SQL for a question the semantic layer's metrics cannot express (D6)."""
-    sql, tables = validate(sql, role)
+    try:
+        sql, tables = validate(sql, role)
+        rows = run(sql, db_path)
+    except Rejected as e:
+        e.sql = [sql]
+        raise
     assumptions = {} if role.category is None else {"scope": role.category}
     caveats = ["Model-written SQL outside the semantic layer's metrics: it reads raw tables, "
                "so Duplicates are counted unless the SQL removes them. Check the SQL before relying on it."]
     return Answer("Ad-hoc query: model-written SQL, checked by the validator before it ran.",
                   [], {}, [], [], [], {"confidence": "Low: the SQL was written by a free model.", "caveats": caveats}, assumptions,
-                  {"sql": sql, "tables": tables, "rows": run(sql, db_path)})
+                  {"sql": sql, "tables": tables, "rows": rows})
 
 
 def settlement_answer(question, role, llm, week, db_path, assumptions):
