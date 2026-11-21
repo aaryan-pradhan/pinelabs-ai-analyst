@@ -22,6 +22,14 @@ _Avoid_: Double-count, repeat
 Successful Attempts divided by all Attempts. Failed Attempts with an unknown failure reason still count.
 _Avoid_: Approval rate, conversion
 
+**GMV**:
+The total value of successful Attempts. Attempts with an unknown amount are left out.
+_Avoid_: Volume, TPV, revenue
+
+**Average ticket**:
+GMV divided by the number of successful Attempts with a known amount.
+_Avoid_: AOV, basket size
+
 **Settlement**:
 The gross amount paid out to a merchant for the successful Attempts of one transaction date. There are no fees.
 _Avoid_: Payout, settled value
@@ -31,6 +39,10 @@ A gap above 0.5% between Settlement and successful Attempt value for the same me
 _Avoid_: Reconciliation break, discrepancy
 
 ## Analysis
+
+**Segment**:
+One value of a dimension, such as UPI or one bank. Attempts with an unknown bank form their own segment, "Unknown bank".
+_Avoid_: Cohort, slice, bucket
 
 **Mix effect**:
 The part of a Success rate change caused by Attempts moving between segments with different Success rates.

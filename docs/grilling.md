@@ -2,7 +2,7 @@
 
 Full brief: [brief.md](brief.md). Deadline: **22 Nov 2026, 6:00 PM IST**. Demo-ready target: **22 Nov 12:00 PM IST**.
 
-## Settled decisions (rounds 1-3, 21 Nov 2026)
+## Settled decisions (rounds 1-4, 21 Nov 2026)
 
 | # | Decision | Answer |
 |---|----------|--------|
@@ -25,12 +25,15 @@ Full brief: [brief.md](brief.md). Deadline: **22 Nov 2026, 6:00 PM IST**. Demo-r
 | D17 | Answer card | Headline, Assumption chips, chart, Facts (each with SQL/tables/filters/window expander), Hypotheses, Recommendations, Caveats (DQ warnings + confidence). Facts only from executed numbers; Hypotheses/Recommendations labelled as LLM narration. |
 | D18 | Model use | Replay cache for the demo questions is generated with the best model, so it reads well. Live use defaults to the cheapest (D1). Model dropdown in sidebar; replay auto-on with banner when no key or cap hit. OpenRouter model picked and verified at build time; OpenRouter is the last slice and is cut first if time is short. |
 | D19 | Success rate | Successful Attempts / all Attempts after removing Duplicates; null `failure_reason` still counts. Terms in [GLOSSARY.md](../GLOSSARY.md). |
+| D20 | Replay cache model | Demo answers are cached from `claude-opus-5-5`; live use is `claude-haiku-5-5` only. Banner + README disclose which model wrote cached answers. Numbers come from executed SQL either way; only the prose differs. |
+| D21 | "Good success rate" | Healthy synthetic baseline (UPI ~95%, card ~91%, overall ~93%) set in the generator; definition unchanged. Eval target 10/10, reached by fixing the analyst, never by editing expected answers. |
+| D22 | Semantic layer | Metrics: Attempts, successful Attempts, Success rate, failure share by reason, GMV, average ticket, settled amount, settlement gap %. Dimensions: Week, date, payment method, bank, bank type, merchant, category, city, tier, failure reason. Joins: transactions-merchants on `merchant_id`, transactions-banks on `bank_id`; settlements vs transactions only after both are aggregated by merchant + date. Null `bank_id` goes to an "Unknown bank" segment; null `amount` counts as an Attempt but is excluded from GMV, with a flag. |
+| D23 | DQ checks | Run per answer, scoped to its tables + window: (1) Duplicates count/% (excluded), (2) null rate per key column used, caveat above 1%, (3) coverage gap: any day below 50% of usual volume, (4) Source mismatch above 0.5% (only if role sees Settlements), (5) segment below 200 Attempts marked low-confidence, feeding the confidence line. |
+| D24 | Decomposition | Midpoint (symmetric) mix-vs-rate: mix = sum (s1-s0)(r0+r1)/2, rate = sum (r1-r0)(s0+s1)/2; sums exactly to the total change. Run by payment method, bank and category; lead with the dimension that explains most. |
 
 ## Open questions (next round)
 
-- Which model generates the replay cache (D18 "best model")?
-- "Show a very good success rate": eval pass rate, or the baseline level of the metric?
-- Semantic-layer metric and dimension list.
-- DQ check list.
-
-Still to grill after these: eval question set.
+- Does "Haiku 5.5 only" drop the model dropdown, Sonnet escalation (D1) and OpenRouter (D2)?
+- Eval question set, grading method, source of expected values.
+- Query limits (timeout, row LIMIT).
+- Merchant-manager scope edge: unspecified category vs explicitly another category.
