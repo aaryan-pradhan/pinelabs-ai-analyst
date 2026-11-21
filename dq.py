@@ -5,11 +5,12 @@ from sqlglot import exp
 
 from executor import run
 from generator import START
-from semantic import ATTEMPTS, DIMENSIONS
+from semantic import ATTEMPTS, DIMENSIONS, SETTLED
 
 NULL_LIMIT = 0.01  # caveat above this null rate
 GAP_SHARE = 0.5  # a day below this share of the usual (median) daily Attempts
 MIN_ATTEMPTS = 200  # a Segment below this in any Week is low-confidence
+MISMATCH = 0.005  # Source mismatch: Settlements off successful Attempt value by more than this
 
 # Nullable key column: (rows it is measured on, what the answer does with a null).
 NULLABLE = {
@@ -20,7 +21,7 @@ NULLABLE = {
 
 
 def check(db_path, weeks, sqls, segments):
-    """{"duplicates", "nulls", "gaps", "low_confidence", "caveats", "confidence"} for the
+    """{"duplicates", "nulls", "gaps", "mismatch", "low_confidence", "caveats", "confidence"} for the
     Attempts in `weeks`, checking only the nullable columns `sqls` use.
     `segments` is {week: {Segment: (attempts, rate)}}."""
     window = f"{DIMENSIONS['week']} IN ({', '.join(str(int(w)) for w in weeks)})"
@@ -30,7 +31,8 @@ def check(db_path, weeks, sqls, segments):
     dupes = int(rows - attempts)
     caveats = [f"{dupes:,} Duplicates ({dupes / rows:.1%} of rows) excluded; the first copy is kept."]
 
-    used = {c.name for sql in sqls for c in sqlglot.parse_one(sql, read="duckdb").find_all(exp.Column)}
+    trees = [sqlglot.parse_one(sql, read="duckdb") for sql in sqls]
+    used = {c.name for tree in trees for c in tree.find_all(exp.Column)}
     cols = [c for c in NULLABLE if c in used]
     nulls = {}
     if cols:
@@ -49,6 +51,16 @@ def check(db_path, weeks, sqls, segments):
         caveats.append(f"Coverage gap: under {GAP_SHARE:.0%} of the usual daily Attempts on "
                        f"{', '.join(map(str, gaps))}.")
 
+    mismatch = 0  # merchant-days, checked only when the answer reads Settlements
+    if any(t.name == "settlements" for tree in trees for t in tree.find_all(exp.Table)):
+        # A missing side counts as 0, so an unsettled merchant-day is a mismatch too.
+        mismatch, days = run(
+            f"SELECT COUNT(*) FILTER (WHERE ABS(COALESCE(settled_amount, 0) - COALESCE(amount, 0))"
+            f" > {MISMATCH} * COALESCE(amount, 0)), COUNT(*) FROM {SETTLED} WHERE {window}", db_path).iloc[0]
+        if mismatch:
+            caveats.append(f"Source mismatch: Settlements differ from successful Attempt value by over "
+                           f"{MISMATCH:.1%} on {mismatch:,} of {days:,} merchant-days.")
+
     low = sorted({f"{seg} in wk{w} ({a:,})" for w, segs in segments.items()
                   for seg, (a, _) in segs.items() if a < MIN_ATTEMPTS})
     if low:
@@ -58,5 +70,5 @@ def check(db_path, weeks, sqls, segments):
         confidence = "Medium: read the Caveats before acting."
     else:
         confidence = "High: no data-quality issues beyond the excluded Duplicates."
-    return {"duplicates": dupes, "nulls": nulls, "gaps": gaps, "low_confidence": low,
+    return {"duplicates": dupes, "nulls": nulls, "gaps": gaps, "mismatch": int(mismatch), "low_confidence": low,
             "caveats": caveats, "confidence": confidence}

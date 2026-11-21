@@ -38,10 +38,12 @@ class Answer:
     dq: dict  # data-quality numbers, caveats and confidence
 
 
-# ask() answers with a Success rate decomposition only; other metrics stay in the
-# semantic layer until an answer shape exists for them.
-ANSWERED = ["success_rate"]
 FILTERABLE = [d for d in DIMENSIONS if d not in ("week", "failure_reason")]  # weeks are chosen separately
+# Metrics ask() has an answer shape for: (weeks in the plan, dimensions it may filter on).
+# A Success rate decomposition compares two Weeks; a Settlement gap reads one, and
+# Settlements only know merchants. Other metrics wait in the semantic layer.
+ANSWERED = {"success_rate": (2, FILTERABLE),
+            "settlement_gap": (1, ["category", "city", "tier", "merchant"])}
 LEADS = ["payment_method", "bank", "category"]  # decomposed every time; the best one leads (D24)
 WEEKS = range(1, 9)  # wk1 = 28 Sep 2026 ... wk8 = 16-22 Nov 2026
 
@@ -51,19 +53,23 @@ def plan_prompt(question):
         "Choose a plan for the question from the semantic layer. Reply with JSON only, e.g.\n"
         '{"metric": "success_rate", "weeks": [6, 7], "filters": {"payment_method": "card"}}\n'
         "weeks is [base week, current week] as integers 1-8 (wk8 is the latest).\n"
+        "For whether Settlements match transactions, use settlement_gap with one week, e.g.\n"
+        '{"metric": "settlement_gap", "weeks": [5]}\n'
         "filters is optional: {dimension: value} when the question names one Segment, "
         "e.g. payment_method is upi, card, netbanking or wallet.\n"
-        f"Metrics: {', '.join(ANSWERED)}\nFilter dimensions: {', '.join(FILTERABLE)}\n"
+        + "".join(f"Metric {m}: filter dimensions {', '.join(dims)}\n" for m, (_, dims) in ANSWERED.items()) +
         f"Question: {question}"
     )
 
 
 def usable(plan):
     weeks, filters = plan.get("weeks"), plan.get("filters", {})
-    return (plan.get("metric") in ANSWERED
-            and isinstance(filters, dict) and set(filters) <= set(FILTERABLE)
+    if plan.get("metric") not in ANSWERED:
+        return False
+    n_weeks, dims = ANSWERED[plan["metric"]]
+    return (isinstance(filters, dict) and set(filters) <= set(dims)
             and all(isinstance(v, str) for v in filters.values())
-            and isinstance(weeks, list) and len(weeks) == 2
+            and isinstance(weeks, list) and len(weeks) == n_weeks
             and all(type(w) is int and w in WEEKS for w in weeks))
 
 
@@ -122,17 +128,17 @@ def ask(question, role, llm, db_path=DB_PATH):
         e.sql = [sql for sql, _ in planned_sql(DEFAULT_PLAN)]
         raise
     weeks = plan["weeks"]
-    base, current = weeks
     filters = plan.setdefault("filters", {})
     cited = [f"{k} = {v}" for k, v in filters.items()]
+    if plan["metric"] == "settlement_gap":
+        return reconcile(question, llm, weeks[0], filters, cited, db_path)
+    base, current = weeks
     window = f"wk{base} vs wk{current}"
 
     (overall_sql, overall_tables), *split_sql = planned_sql(plan)
     overall = run(overall_sql, db_path)
     if set(overall["week"]) != set(weeks):  # e.g. a filter value the data does not have
-        e = ModelUnavailable(f"No Attempts match {', '.join(cited)} in {window}; try rephrasing.")
-        e.sql = [overall_sql]
-        raise e
+        raise no_match(cited, window, overall_sql)
     splits = []
     for dim, (sql, tables) in zip(leads(plan), split_sql):
         seg = run(sql, db_path)
@@ -155,6 +161,40 @@ def ask(question, role, llm, db_path=DB_PATH):
     return Answer(story["headline"], facts, d,
                   [{k: s[k] for k in ("segment", "mix", "rate")} for s in d["segments"]],
                   story["hypotheses"], story["recommendations"], dq.check(db_path, weeks, [overall_sql, seg_sql], by_week))
+
+
+def no_match(cited, window, sql):
+    e = ModelUnavailable(f"No Attempts match {', '.join(cited)} in {window}; try rephrasing.")
+    e.sql = [sql]
+    return e
+
+
+def reconcile(question, llm, week, filters, cited, db_path):
+    """Settlement gap by category for one Week (D22)."""
+    window = f"wk{week}"
+    sql, tables = validate(compile_sql(["settled_amount", "settlement_gap"], ["category"], [week], filters))
+    rows = run(sql, db_path)
+    if rows.empty:
+        raise no_match(cited, window, sql)
+    gaps = {c: float(g) for c, g in zip(rows["category"], rows["settlement_gap"])}
+    facts = [Fact(f"{c} Settlement gap {window}", g, sql, tables, cited, window, "%") for c, g in gaps.items()]
+    try:
+        story = reply(llm, narration_prompt(question, gap_headline(gaps, window), facts), narrated)
+    except ModelUnavailable as e:
+        e.sql = [sql]
+        raise
+    return Answer(story["headline"], facts, {}, [{"segment": c, "gap": g} for c, g in gaps.items()],
+                  story["hypotheses"], story["recommendations"], dq.check(db_path, [week], [sql], {}))
+
+
+def gap_headline(gaps, window):
+    off = {c: g for c, g in gaps.items() if abs(g) > dq.MISMATCH}
+    if not off:
+        return f"Settlements match successful Attempt value within {dq.MISMATCH:.1%} for every category in {window}."
+    worst = max(off, key=lambda c: abs(off[c]))
+    side = "below" if off[worst] < 0 else "above"
+    return (f"Settlements for {worst} are {abs(off[worst]):.1%} {side} successful Attempt value in {window}; "
+            f"{len(gaps) - len(off)} of {len(gaps)} categories match within {dq.MISMATCH:.1%}.")
 
 
 def headline(d, base, current, filters):
