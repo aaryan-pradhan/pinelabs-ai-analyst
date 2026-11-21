@@ -20,13 +20,8 @@ def option(text):
 
 HEADLINE = {"zoom": 1.7}
 CUES = {
-    0: [(("its monday", -0.1), "js", "on('monday')"),  # each card line appears on the words that say it
-        ("you run payments", "js", "on('you')"),
-        ("your dashboard says", "js", "on('dash')"),
-        ("fell four points", "js", "on('fell')"),
-        ("your ceo", "js", "on('ceo')"),
-        ("pine labs asked", "js", "on('goal')"),
-        (("pine labs asked", 1.0), "js", "on('g')"),
+    0: [(0.2, "cam", {"sel": "#context", "zoom": 1.22, "pad": 60, "dur": 9000}),  # the brief, as Pine Labs gave it
+        ("pine labs asked", "cam", {"sel": "#goal", "zoom": 1.75, "pad": 40, "dur": 1500}),
         ("here is", "split")],  # the card ends; the app's opening page begins
     1: [("so we ask", "ask", "Why did success rate drop in week 6?", "week 6"),
         ("the headline", "cam", {"a": "SUCCESS RATE FELL 4.0", "n": 2, **HEADLINE}),
