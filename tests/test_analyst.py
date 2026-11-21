@@ -159,6 +159,13 @@ def test_unusable_plan_from_the_model_is_refused_not_run(db_path):
     assert all("IN (7, 8)" in s for s in err.value.sql)
 
 
+def test_plan_for_a_metric_the_analyst_cannot_answer_is_refused(db_path):
+    gmv = {"metric": "gmv", "dimensions": ["payment_method"], "weeks": [7, 8]}
+
+    with pytest.raises(ModelUnavailable, match="unusable reply"):
+        ask("What was GMV by payment method in week 8?", "analyst", fake_llm(gmv), db_path)
+
+
 def test_narration_that_is_not_json_is_refused_with_the_executed_sql(db_path):
     replies = iter([json.dumps(WK6_PLAN), "Sorry, I can't help with that."])
 
