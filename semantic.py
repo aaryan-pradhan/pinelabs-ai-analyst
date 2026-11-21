@@ -36,7 +36,7 @@ DIMENSIONS = {
     "week": WEEK,
     "payment_method": "payment_method",
     "bank": "COALESCE(banks.name, 'Unknown bank')",  # null bank_id is its own Segment
-    "bank_type": "COALESCE(banks.type, 'Unknown bank')",
+    "bank_type": "COALESCE(banks.type, 'Unknown bank type')",
     "category": "merchants.category",
     "city": "merchants.city",
     "tier": "merchants.tier",
