@@ -48,7 +48,9 @@ FILTERABLE = [d for d in DIMENSIONS if d not in ("week", "failure_reason")]  # w
 # Metrics ask() has an answer shape for: (weeks in the plan, dimensions it may filter on).
 # A Success rate decomposition compares two Weeks; a Settlement gap reads one, unfiltered,
 # since the Source mismatch check covers the whole Week. Other metrics wait in the semantic layer.
-ANSWERED = {"success_rate": (2, FILTERABLE), "settlement_gap": (1, [])}
+ANSWERED = {"success_rate": (2, FILTERABLE), "settlement_gap": (1, []), "gmv": (1, [])}
+# One Week, split by category: metric -> (label, Fact unit, chart key).
+BY_CATEGORY = {"settlement_gap": ("Settlement gap", "%", "gap"), "gmv": ("GMV", "₹", "gmv")}
 LEADS = ["payment_method", "bank", "category"]  # decomposed every time; the best one leads (D24)
 TABLE_LIST = "; ".join(f"{t}({', '.join(cols)})" for t, cols in TABLES.items())
 WEEKS = range(1, 9)  # wk1 = 28 Sep 2026 ... wk8 = 16-22 Nov 2026
@@ -62,6 +64,7 @@ def plan_prompt(question):
         "omit weeks when the question names no week.\n"
         "For whether Settlements match transactions, use settlement_gap with one week, e.g.\n"
         '{"metric": "settlement_gap", "weeks": [5]}\n'
+        'For GMV, use gmv with one week; it is split by category, e.g. {"metric": "gmv", "weeks": [8]}\n'
         "filters is optional: {dimension: value} when the question names one Segment, "
         "e.g. payment_method is upi, card, netbanking or wallet.\n"
         f"Metrics: {', '.join(ANSWERED)}\nFilter dimensions (success_rate only): {', '.join(FILTERABLE)}\n"
@@ -91,12 +94,17 @@ def usable(plan):
 
 
 def narration_prompt(question, computed_headline, facts):
-    lines = "\n".join(f"- {f.label}: {f.value * 100:.2f}{f.unit}" for f in facts)
+    lines = "\n".join(f"- {f.label}: {shown(f)}" for f in facts)
     return (
         "You are a payments analyst. Using only the computed headline and Facts below, reply with JSON only:\n"
         '{"headline": <one sentence>, "hypotheses": [<possible cause>], "recommendations": [<next step>]}\n'
         f"Question: {question}\nComputed headline: {computed_headline}\nFacts:\n{lines}"
     )
+
+
+def shown(fact):
+    # + 0.0 turns a rounded -0.0 into 0.0: a zero's sign is float noise that would change the prompt.
+    return f"₹{fact.value:,.2f}" if fact.unit == "₹" else f"{round(fact.value * 100, 2) + 0.0:.2f}{fact.unit}"
 
 
 def parse(text, fits):
@@ -157,8 +165,8 @@ def ask(question, role, llm, db_path=DB_PATH, weeks=None):
     if plan.get("weeks") is None:  # latest complete Week(s) (D16)
         plan["weeks"] = assumptions["weeks"] = DEFAULT_PLAN["weeks"][-ANSWERED[plan["metric"]][0]:]
     weeks = plan["weeks"]
-    if plan["metric"] == "settlement_gap":
-        return settlement_answer(question, role, llm, weeks[0], db_path, assumptions)
+    if plan["metric"] in BY_CATEGORY:
+        return category_answer(question, role, llm, plan["metric"], weeks[0], db_path, assumptions)
     assumptions["denominator"] = "all Attempts excluding Duplicates"  # D19
     base, current = weeks
     filters = plan.setdefault("filters", {})
@@ -216,20 +224,31 @@ def ad_hoc_answer(sql, role, db_path):
                   assumptions=assumptions, result={"sql": sql, "tables": tables, "rows": rows})
 
 
-def settlement_answer(question, role, llm, week, db_path, assumptions):
-    """Settlement gap by category for one Week (D22)."""
+def category_answer(question, role, llm, metric, week, db_path, assumptions):
+    """A metric by category for one Week: GMV, or the Settlement gap (D22)."""
+    label, unit, key = BY_CATEGORY[metric]
     window = f"wk{week}"
-    sql, tables = validate(compile_sql(["settlement_gap"], ["category"], [week]), role)
+    sql, tables = validate(compile_sql([metric], ["category"], [week]), role)  # a manager is scoped here
+    if role.category is not None:
+        assumptions["scope"] = role.category
     rows = run(sql, db_path)
-    gaps = {c: float(g) for c, g in zip(rows["category"], rows["settlement_gap"])}
-    facts = [Fact(f"{c} Settlement gap {window}", g, sql, tables, [], window, "%") for c, g in gaps.items()]
+    values = {c: float(v) for c, v in zip(rows["category"], rows[metric])}
+    facts = [Fact(f"{c} {label} {window}", v, sql, tables, [], window, unit) for c, v in values.items()]
+    computed = gap_headline(values, window) if metric == "settlement_gap" else gmv_headline(values, window)
     try:
-        story = reply(llm, narration_prompt(question, gap_headline(gaps, window), facts), narrated)
+        story = reply(llm, narration_prompt(question, computed, facts), narrated)
     except ModelUnavailable as e:
         e.sql = [sql]
         raise
-    return Answer(story["headline"], facts, {}, [{"segment": c, "gap": g} for c, g in gaps.items()],
-                  story["hypotheses"], story["recommendations"], dq.check(db_path, [week], [sql], {}), assumptions)
+    return Answer(story["headline"], facts, {}, [{"segment": c, key: v} for c, v in values.items()],
+                  story["hypotheses"], story["recommendations"],
+                  dq.check(db_path, [week], [sql], {}, role.category), assumptions)
+
+
+def gmv_headline(gmv, window):
+    top = max(gmv, key=gmv.get)
+    total = sum(gmv.values())
+    return f"GMV in {window} was ₹{total:,.0f}; {top} led with ₹{gmv[top]:,.0f} ({gmv[top] / total:.0%})."
 
 
 def gap_headline(gaps, window):

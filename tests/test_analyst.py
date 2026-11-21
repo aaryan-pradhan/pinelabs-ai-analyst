@@ -6,6 +6,7 @@ import shutil
 import duckdb
 import pytest
 
+import generator
 from analyst import AskBack, ask
 from llm import ModelUnavailable
 from validator import ANALYST, Rejected, Role
@@ -103,11 +104,22 @@ def test_wk5_settlements_fall_short_for_one_category(db_path):
     assert gaps["electronics"] == pytest.approx(-0.03, abs=1e-9)
     computed = prompts[1].split("Computed headline: ")[1].split("\n")[0]
     assert "electronics" in computed and "3.0%" in computed
+    assert "-0.00%" not in prompts[1]  # a zero gap's sign is float noise; it would change the replay key
     assert answer.dq["mismatch"]
     assert any("Source mismatch" in line for line in answer.dq["caveats"])
     for fact in answer.facts:
         assert "settlements" in fact.tables
         assert fact.window == "wk5"
+
+
+def test_gmv_by_category_excludes_duplicates(db_path):
+    answer = ask("GMV by category in wk8", ANALYST, fake_llm({"metric": "gmv", "weeks": [8]}), db_path)
+
+    gmv = {row["segment"]: round(row["gmv"], 2) for row in answer.chart}
+    assert gmv == generator.expected(db_path)["wk8_gmv_by_category"]  # hand-written SQL, Duplicates removed
+    assert any("left out of GMV" in line for line in answer.dq["caveats"])  # null amounts
+    for fact in answer.facts:
+        assert fact.unit == "₹" and fact.window == "wk8"
 
 
 WEEK = "CAST(FLOOR(date_diff('day', DATE '2026-09-28', CAST(ts AS DATE)) / 7) AS INTEGER) + 1"

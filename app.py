@@ -1,12 +1,14 @@
+import json
 import os
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+import evaluate
 import generator
 import llm
-from analyst import WEEKS, AskBack, ask
+from analyst import WEEKS, AskBack, ask, shown
 from validator import ANALYST, Rejected, Role
 
 
@@ -21,6 +23,16 @@ except (KeyError, FileNotFoundError):  # no key: the app still starts, questions
 role = ANALYST  # auth is mocked: the viewer picks a role (D15)
 if st.sidebar.selectbox("Role", ["Analyst", "Merchant manager"]) == "Merchant manager":
     role = Role("Merchant manager", st.sidebar.selectbox("Category", generator.CATEGORIES))
+if st.sidebar.button("Run eval"):  # 10 known-answer questions (D26)
+    try:
+        with st.spinner("Running the 10 eval questions on the free model"):
+            result, source = evaluate.live(), "Run now on the free model (identical prompts replay saved replies)"
+    except llm.NoQuota as e:  # no key or quota: the committed result, labelled
+        result = json.loads(evaluate.RESULT_PATH.read_text())
+        source = f"Free model unavailable ({e}), so this is the last committed result from {result['date']}"
+    with st.expander(f"Eval pass rate: {result['passed']}/{result['total']}", expanded=True):
+        st.caption(f"{source}. Models: {', '.join(result['models'])}. Graded on structured fields only.")
+        st.dataframe(pd.DataFrame(result["results"])[["passed", "role", "question", "why"]], hide_index=True)
 question = st.text_input("Ask a question", "Why did success rate drop in week 6?")
 if st.session_state.get("asked") != question:  # a new question drops the edited window
     st.session_state.asked, st.session_state.weeks = question, None
@@ -66,19 +78,22 @@ if question:
         st.code(answer.result["sql"], language="sql")
         st.markdown(f"Tables: {', '.join(answer.result['tables'])}")
     else:
-        d = answer.decomposition  # empty for a Settlement gap answer
-        unit = "pp" if d else "%"
+        d = answer.decomposition  # empty for a by-category answer (GMV, Settlement gap)
+        gmv = "gmv" in answer.chart[0]
+        unit = "₹" if gmv else "pp" if d else "%"
         chart = pd.DataFrame(answer.chart).melt(id_vars="segment", var_name="effect", value_name=unit)
-        chart[unit] *= 100
+        if not gmv:
+            chart[unit] *= 100
         title = (f"Mix vs rate effect by {d['dimension'].replace('_', ' ')} "
                  f"(total {d['total'] * 100:+.2f}pp = mix {d['mix'] * 100:+.2f}pp "
                  f"+ rate {d['rate'] * 100:+.2f}pp)" if d
+                 else "GMV by category (successful Attempts, Duplicates removed)" if gmv
                  else "Settlement gap by category (% of successful Attempt value)")
         st.plotly_chart(px.bar(chart, x="segment", y=unit, color="effect", barmode="group", title=title))
 
         st.markdown("### Facts")
         for fact in answer.facts:
-            value = f"{fact.value * 100:.2f}%" if fact.unit == "%" else f"{fact.value * 100:+.2f}pp"
+            value = f"{fact.value * 100:+.2f}pp" if fact.unit == "pp" else shown(fact)
             st.markdown(f"**{fact.label}:** {value}")
             with st.expander("SQL, tables, filters, window"):
                 st.code(fact.sql, language="sql")

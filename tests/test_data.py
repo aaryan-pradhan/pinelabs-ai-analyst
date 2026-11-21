@@ -1,4 +1,7 @@
 """Seam 2: the generated database, checked with plain SQL."""
+import json
+from pathlib import Path
+
 import duckdb
 import pytest
 
@@ -88,3 +91,10 @@ def test_same_seed_reproduces_identical_data(db_path, tmp_path):
     for table in ["transactions", "merchants", "banks", "settlements"]:
         query = f"SELECT * FROM {table} ORDER BY ALL"
         assert a.execute(query).fetchall() == b.execute(query).fetchall(), table
+
+
+def test_committed_eval_answers_match_the_generated_data(db_path):
+    committed = json.loads((Path(__file__).parent.parent / "eval" / "expected.json").read_text())
+    assert generator.expected(db_path) == committed
+    assert committed["drop_bank"] == "Coastal Bank"
+    assert committed["gap_category"] == "electronics"
