@@ -132,6 +132,18 @@ def narrated(story):
             and isinstance(story.get("recommendations"), list))
 
 
+UNNARRATED = ("The free model was unavailable, so the headline is computed from the Facts "
+              "and there are no Hypotheses or Recommendations.")
+
+
+def narrate(llm, question, computed, facts, caveats):
+    """The model's story, or None with a caveat: the Facts stand without it, e.g. on a replay-cache miss."""
+    try:
+        return reply(llm, narration_prompt(question, computed, facts), narrated)
+    except ModelUnavailable:
+        caveats.append(UNNARRATED)
+
+
 # Latest complete Week vs the one before (D16); its SQL is shown when the model is down.
 DEFAULT_PLAN = {"metric": "success_rate", "weeks": [7, 8], "filters": {}}
 
@@ -157,7 +169,7 @@ def ask(question, role, llm, db_path=DB_PATH, weeks=None):
     if "ask" in plan:
         raise AskBack(plan["ask"])
     if "sql" in plan:
-        return ad_hoc_answer(plan["sql"], role, db_path)
+        return ad_hoc_answer(question, plan["sql"], role, llm, db_path)
     assumptions = {}
     if weeks is not None:
         plan["weeks"] = assumptions["weeks"] = weeks
@@ -199,19 +211,14 @@ def ask(question, role, llm, db_path=DB_PATH, weeks=None):
 
     computed = headline(d, base, current, filters)
     checks = dq.check(db_path, weeks, [overall_sql, seg_sql], by_week, role.category)
-    try:
-        story = reply(llm, narration_prompt(question, computed, facts), narrated)
-    except ModelUnavailable:  # the Facts stand without narration, e.g. an edited window the replay cache lacks
-        story = None
-        checks["caveats"].append("The free model was unavailable, so the headline is computed from the Facts "
-                                 "and there are no Hypotheses or Recommendations.")
+    story = narrate(llm, question, computed, facts, checks["caveats"])
     return Answer(story["headline"] if story else computed, facts, d,
                   [{k: s[k] for k in ("segment", "mix", "rate")} for s in d["segments"]],
                   story["hypotheses"] if story else [], story["recommendations"] if story else [], checks,
                   assumptions, narrated=story is not None)
 
 
-def ad_hoc_answer(sql, role, db_path):
+def ad_hoc_answer(question, sql, role, llm, db_path):
     """Model-written SQL for a question the semantic layer's metrics cannot express (D6)."""
     try:
         sql, tables = validate(sql, role)
@@ -222,10 +229,15 @@ def ad_hoc_answer(sql, role, db_path):
     assumptions = {} if role.category is None else {"scope": role.category}
     caveats = ["Model-written SQL outside the semantic layer's metrics: it reads raw tables, "
                "so Duplicates are counted unless the SQL removes them. Check the SQL before relying on it."]
-    return Answer("Ad-hoc query: model-written SQL, checked by the validator before it ran.",
-                  facts=[], decomposition={}, chart=[], hypotheses=[], recommendations=[],
+    # ponytail: the first 20 rows stand in for Facts; a long result is narrated from its head only.
+    computed = f"The model-written SQL returned {len(rows):,} row{'s' * (len(rows) != 1)}:\n{rows.head(20).to_csv(index=False)}"
+    story = narrate(llm, question, computed, [], caveats)
+    return Answer(story["headline"] if story else "Ad-hoc query: model-written SQL, checked by the validator before it ran.",
+                  facts=[], decomposition={}, chart=[], hypotheses=story["hypotheses"] if story else [],
+                  recommendations=story["recommendations"] if story else [],
                   dq={"confidence": "Low: the SQL was written by a free model.", "caveats": caveats},
-                  assumptions=assumptions, result={"sql": sql, "tables": tables, "rows": rows})
+                  assumptions=assumptions, result={"sql": sql, "tables": tables, "rows": rows},
+                  narrated=story is not None)
 
 
 def category_answer(question, role, llm, metric, week, db_path, assumptions):

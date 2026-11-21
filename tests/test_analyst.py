@@ -372,6 +372,18 @@ def test_demo_merchant_manager_settlements_block_replays_with_no_model(db_path):
 
 
 def test_demo_duplicates_question_replays_with_no_model(db_path):
-    answer = ask("How many duplicate transactions are there?", ANALYST, with_replay(no_model, []), db_path)
+    replayed = []
+    answer = ask("How many duplicate transactions are there?", ANALYST, with_replay(no_model, replayed), db_path)
 
+    assert len(replayed) == 2  # plan and narration
     assert "Duplicates" in answer.dq["caveats"][0]
+    assert "2,252" in answer.headline and answer.hypotheses and answer.recommendations
+
+
+def test_ad_hoc_answer_is_narrated_from_the_rows_it_returned(db_path):
+    prompts = []
+    sql = "SELECT status, COUNT(*) AS n FROM transactions GROUP BY status ORDER BY n DESC"
+    answer = ask("Which status is most common?", ANALYST, fake_llm({"sql": sql}, prompts), db_path)
+
+    assert answer.headline == "h" and answer.narrated
+    assert "status,n\nsuccess," in prompts[1]

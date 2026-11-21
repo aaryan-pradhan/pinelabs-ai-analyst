@@ -224,7 +224,7 @@ if question:
 
     if not answer.narrated:
         writer = "the pipeline, as the free model was unavailable"
-    doc(BLANK, RULE, BLANK, row(label("Answer"), "" if answer.result else f"headline by {writer}"),
+    doc(BLANK, RULE, BLANK, row(label("Answer"), f"headline by {writer}"),
         BLANK, lines(answer.headline), BLANK)
     chips = st.container(horizontal=True, gap="small")
     if "weeks" in answer.assumptions:
