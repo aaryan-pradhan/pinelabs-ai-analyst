@@ -211,8 +211,9 @@ def ad_hoc_answer(sql, role, db_path):
     caveats = ["Model-written SQL outside the semantic layer's metrics: it reads raw tables, "
                "so Duplicates are counted unless the SQL removes them. Check the SQL before relying on it."]
     return Answer("Ad-hoc query: model-written SQL, checked by the validator before it ran.",
-                  [], {}, [], [], [], {"confidence": "Low: the SQL was written by a free model.", "caveats": caveats}, assumptions,
-                  {"sql": sql, "tables": tables, "rows": rows})
+                  facts=[], decomposition={}, chart=[], hypotheses=[], recommendations=[],
+                  dq={"confidence": "Low: the SQL was written by a free model.", "caveats": caveats},
+                  assumptions=assumptions, result={"sql": sql, "tables": tables, "rows": rows})
 
 
 def settlement_answer(question, role, llm, week, db_path, assumptions):
