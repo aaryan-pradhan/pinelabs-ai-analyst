@@ -2,7 +2,7 @@
 
 Full brief: [brief.md](brief.md). Deadline: **22 Nov 2026, 6:00 PM IST**. Demo-ready target: **22 Nov 12:00 PM IST**.
 
-## Settled decisions (rounds 1-5, 21 Nov 2026)
+## Settled decisions (rounds 1-6, 21 Nov 2026)
 
 | # | Decision | Answer |
 |---|----------|--------|
@@ -35,8 +35,11 @@ Full brief: [brief.md](brief.md). Deadline: **22 Nov 2026, 6:00 PM IST**. Demo-r
 | D27 | Eval grading | Expected values from hand-written SQL over generated data, written to `eval/expected.json` by the generator. Structured-field grading only (rates +/-0.2pp, counts exact, chosen dimension, blocked/rejected flag, Assumption); no LLM judge. Deployed eval button falls back to the last committed result, labelled. |
 | D28 | Query limits | DuckDB read-only, 5 s timeout, `LIMIT 10000` added when missing, keyless joins rejected, semantic-layer tables/columns/joins only, results cached per (SQL, role) with `st.cache_data`. |
 | D29 | Manager scope | Unspecified category: validator adds the manager's own category filter, shown as an Assumption chip. Explicit other category: blocked with reason. |
+| D30 | Rate limit / outage | Demo questions serve the cached Opus answer with banner. Other questions show "free model limit reached, try again in a minute" plus the semantic-layer SQL it would run. Never a paid call. |
+| D31 | Eval model | The README's eval score comes from the same free model the live app uses. Below 10/10 means fixing prompts and plan schema, never quoting an Opus score as the app's. |
+| D32 | Free model | OpenRouter `nvidia/nemotron-3.5-super-vl:free`, falling back to `inclusionai/ling-3.2-flash:free` then `google/gemma-4-31b-it:free`. Smoke-test against the plan schema when wiring; replace if it fails. Aaryan creates the OpenRouter key and allows free-model data policy then. Limits (21 Nov): 20 req/min, 50 req/day under $10 lifetime credit. |
+| D33 | Daily cap | Stay at 50 req/day. In development an identical prompt replays a saved response, so eval reruns cost almost nothing. Fallback if still blocked: buy $10 credit once. The replay cache is the priority for the demo; live use is expected to be light. |
 
-## Open questions (next round)
+## Open questions
 
-- Which free model for live use (research running), and what happens when it is rate-limited or down.
-- Which model the committed eval result is run on.
+None. Next step (D11): `docs/PLAN.md`.
