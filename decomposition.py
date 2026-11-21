@@ -30,3 +30,11 @@ def decompose(base, current):
         "rate": sum(s["rate"] for s in segments),
         "segments": segments,
     }
+
+
+def explained(d):
+    """Share of the total change one story covers: the whole Mix effect, or one
+    Segment's Rate effect. A drop spread evenly over Segments explains little."""
+    # ponytail: a uniform drop still credits the biggest Segment its share (UPI ~62%);
+    # score rate effects against Segment share if that ever picks the wrong lead.
+    return max(abs(d["mix"]), *(abs(s["rate"]) for s in d["segments"])) / (abs(d["total"]) or 1)
