@@ -39,6 +39,20 @@ section[data-testid="stSidebar"] {min-width: 280px}
       background: radial-gradient(circle, #8a8a8a 1px, transparent 1.4px) 0 0 / 4px 4px}
 .bar.on {background: #f2f2f2}
 .meter {letter-spacing: 2px}
+.head {position: relative}
+.forest {position: absolute; top: 4px; right: 0; width: 344px; height: 100px}
+.forest i {position: absolute; left: 0; top: 0}
+.forest .t {width: 344px; height: 96px; animation: grow .6s steps(6, end) both}
+.forest .px {width: 3px; height: 3px}
+.forest .ground {top: 96px; width: 344px; height: 1px;
+       background: repeating-linear-gradient(90deg, #111 0 3px, transparent 3px 8px)}
+.forest .w {animation: wind 3.2s steps(1, end) infinite; animation-delay: var(--d)}
+@keyframes grow {from {transform: scaleY(0)}}
+@keyframes wind {50% {transform: translateX(4px)}}
+.forest .snow {width: 2px; height: 2px; background: #9a9a9a; animation: snow 6s steps(24, end) infinite}
+@keyframes snow {to {transform: translateY(94px)}}
+@media (prefers-reduced-motion: reduce) {.forest * {animation: none !important}}
+@media (max-width: 760px) {.forest {display: none}}
 summary {list-style: none; cursor: pointer}
 summary::-webkit-details-marker {display: none}
 summary:hover {background: #f4f4f4}
@@ -87,6 +101,26 @@ def bar(value, top, on, width):
     return f'<i class="bar{" on" if on else ""}" style="width:{abs(value) / (top or 1) * width:.0f}px"></i>'
 
 
+def forest():
+    """A pixel-art pine forest: each tree grows in on load, its crown sways a pixel in the wind, and snow falls.
+    Pixels are box-shadows on one element, since st.html strips <svg>."""
+    trees = []
+    for i, (x, tiers) in enumerate(((0, 2), (10, 4), (24, 5), (40, 3), (51, 4), (66, 2), (75, 3))):
+        widths = [t + r for t in range(tiers) for r in range(4)] + [0, 0]  # tiers stepping in 2px, then a trunk
+        h, cx = len(widths), x + tiers + 2
+        crown, rest = [], []
+        for y, w in enumerate(widths):
+            (crown if y < h // 3 else rest).extend(  # dithered light on the left side
+                f"{(cx + dx) * 4}px {(24 - h + y) * 4}px {'#9a9a9a' if dx < 0 and (dx + y) % 3 == 0 else '#111'}"
+                for dx in range(-w, w + 1))
+        trees.append(f'<i class="t" style="--d:{-i * .7:.1f}s;animation-delay:{i * .12:.2f}s;'
+                     f'transform-origin:{cx * 4}px 96px"><i class="px" style="box-shadow:{",".join(rest)}"></i>'
+                     f'<i class="px w" style="box-shadow:{",".join(crown)}"></i></i>')
+    snow = "".join(f'<i class="snow" style="left:{x}px;animation-delay:{-d}s"></i>'
+                   for x, d in ((22, 0), (70, 3.1), (128, 1.4), (183, 4.6), (236, 2.2), (290, 5.3), (330, .7)))
+    return f'<div class="forest" aria-hidden="true">{"".join(trees)}{snow}<i class="ground"></i></div>'
+
+
 generator.ensure(generator.DB_PATH)
 try:
     os.environ.setdefault("OPENROUTER_API_KEY", st.secrets["OPENROUTER_API_KEY"])
@@ -104,10 +138,10 @@ with st.sidebar:
     run_eval = st.button("Run eval", width="stretch")
     st.caption("Grades 10 known-answer questions on the free model.")
 
-doc(ln("Pine Labs"), ln("Payments analytics"), ln(f"{len(WEEKS)} Weeks of payment Attempts, wk{WEEKS[0]} - wk{WEEKS[-1]}"),
+doc(forest(), ln("Pine Labs"), ln("Payments analytics"), ln(f"{len(WEEKS)} Weeks of payment Attempts, wk{WEEKS[0]} - wk{WEEKS[-1]}"),
     BLANK, ln('<span class="inv">AI Business Analyst: ask about Success rate, GMV or Settlements</span>'), BLANK,
     lines("Every number below comes from SQL that ran on the data. Anything a model wrote is labelled as such."),
-    BLANK)
+    BLANK, cls="head")
 
 if run_eval:  # 10 known-answer questions (D26)
     try:
