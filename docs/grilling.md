@@ -42,7 +42,9 @@ Full brief: [brief.md](brief.md). Deadline: **22 Nov 2026, 6:00 PM IST**. Demo-r
 
 | D34 | Demo cache authoring | No Anthropic API key. The demo cache is written in a Claude Code session (Opus 5.5): numbers, SQL and charts come from real pipeline execution; Claude writes and polishes the headline, Hypotheses and Recommendations. Banner + README say the cached narration was written with Claude Code during development. Supersedes the Opus-script part of D20/D25. |
 | D35 | Live model access | Live model is NVIDIA Nemotron (D32), reached through OpenRouter, which needs only the free OpenRouter key. Key needed only when the live slice is wired; until then the app runs replay-only. |
+| D36 | UI style | Direction B, "tempered": the palette of the owner's GitHub profile (`#0d1117` ground, grayscale, one `#ffc400` accent for the series or line that matters), a clean sans for prose, monospace only for numbers, SQL and labels, bordered cards rather than dashed rules. Dark only, no light toggle. Variant A (everything monospace, line-number gutter, "exhibit" sections) was rejected as too hacker-styled for a Pine Labs business panel. |
+| D37 | UI timing | No static mockup: the real app is the prototype. Feature tickets render their sections with plain Streamlit components; one polish ticket after #8 applies D36 (theme in `.streamlit/config.toml`, two-panel wk6 chart: traffic share and success rate by method, wk5 vs wk6) and a layout pass reviewed live with the owner. A mockup was rejected because it costs about 45 min and is thrown away. |
 
 ## Open questions
 
-None. Shared understanding confirmed 21 Nov. Spec: issue #1. Next: `/to-tickets`.
+None. Shared understanding confirmed 21 Nov. Spec: issue #1. UI decisions D36-D37 added 21 Nov. Next: #3, then #6, #7, #5, #8, #4, #9, UI polish, #11, #12, #13, #14.
