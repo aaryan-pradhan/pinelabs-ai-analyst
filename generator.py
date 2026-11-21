@@ -1,0 +1,111 @@
+"""Seeded synthetic payments data, written to a DuckDB file.
+
+8 Weeks, Mon 28 Sep - Sun 22 Nov 2026. Planted story (a): in wk6 a
+festive-sale merchant pushes extra traffic to netbanking and wallet, so the
+overall Success rate falls while every payment method stays flat.
+"""
+from pathlib import Path
+
+import duckdb
+import numpy as np
+import pandas as pd
+
+START = pd.Timestamp("2026-09-28")
+DAYS = 56
+BASE_PER_DAY = 2550
+FESTIVE_PER_DAY = 1050  # wk6 extra traffic from the festive merchant
+FESTIVE_MERCHANT = 1
+
+# payment method: (share of baseline traffic, Success rate)
+METHODS = {
+    "upi": (0.62, 0.955),
+    "card": (0.28, 0.915),
+    "netbanking": (0.06, 0.78),
+    "wallet": (0.04, 0.80),
+}
+FESTIVE_METHODS = {"netbanking": 0.55, "wallet": 0.45}
+
+CATEGORIES = ["grocery", "electronics", "fashion", "travel", "food_delivery", "fuel"]
+CITIES = ["Mumbai", "Delhi", "Bengaluru", "Chennai", "Hyderabad",
+          "Pune", "Kolkata", "Ahmedabad", "Jaipur", "Lucknow"]
+TIERS = ["large", "mid", "small"]
+BANKS = [("Arya Bank", "public"), ("Bharat National Bank", "public"),
+         ("Coastal Bank", "public"), ("Deccan Private Bank", "private"),
+         ("Everest Bank", "private"), ("Fortune Bank", "private"),
+         ("Global Trust Bank", "foreign"), ("Harbour International", "foreign")]
+FAILURE_REASONS = ["insufficient_funds", "bank_timeout", "authentication_failed",
+                   "risk_declined", "technical_error"]
+N_MERCHANTS = 300
+DB_PATH = Path(__file__).parent / "payments.duckdb"
+
+
+def build(path, seed=42):
+    rng = np.random.default_rng(seed)
+
+    merchants = pd.DataFrame({
+        "merchant_id": np.arange(1, N_MERCHANTS + 1),
+        "name": [f"Merchant {i:03d}" for i in range(1, N_MERCHANTS + 1)],
+        "category": rng.choice(CATEGORIES, N_MERCHANTS),
+        "city": rng.choice(CITIES, N_MERCHANTS),
+        "tier": rng.choice(TIERS, N_MERCHANTS, p=[0.1, 0.3, 0.6]),
+    })
+    merchants.loc[0, ["name", "category"]] = ["Utsav Festive Mart", "fashion"]
+    banks = pd.DataFrame({
+        "bank_id": np.arange(1, len(BANKS) + 1),
+        "name": [b[0] for b in BANKS],
+        "type": [b[1] for b in BANKS],
+    })
+
+    n_base = DAYS * BASE_PER_DAY
+    day = np.repeat(np.arange(DAYS), BASE_PER_DAY)
+    weights = rng.lognormal(0, 1, N_MERCHANTS)
+    merchant = rng.choice(merchants.merchant_id, n_base, p=weights / weights.sum())
+    method = rng.choice(list(METHODS), n_base, p=[s for s, _ in METHODS.values()])
+
+    festive_days = np.arange(35, 42)  # wk6
+    n_fest = len(festive_days) * FESTIVE_PER_DAY
+    day = np.concatenate([day, np.repeat(festive_days, FESTIVE_PER_DAY)])
+    merchant = np.concatenate([merchant, np.full(n_fest, FESTIVE_MERCHANT)])
+    method = np.concatenate([method, rng.choice(
+        list(FESTIVE_METHODS), n_fest, p=list(FESTIVE_METHODS.values()))])
+
+    n = len(day)
+    tx = pd.DataFrame({
+        "ts": START + pd.to_timedelta(day, "D") + pd.to_timedelta(rng.integers(0, 86400, n), "s"),
+        "merchant_id": merchant,
+        "bank_id": rng.integers(1, len(BANKS) + 1, n),
+        "payment_method": method,
+        "amount": np.round(rng.lognormal(7, 1, n), 2),
+    })
+
+    # Exact successes per (week, method) keep each method's rate flat week to week.
+    week = day // 7
+    success = np.zeros(n, dtype=bool)
+    for (w, m), idx in tx.groupby([week, method]).indices.items():
+        k = round(len(idx) * METHODS[m][1])
+        success[rng.choice(idx, k, replace=False)] = True
+    tx["status"] = np.where(success, "success", "failed")
+    tx["failure_reason"] = np.where(success, None, rng.choice(FAILURE_REASONS, n))
+
+    tx = tx.sort_values("ts", kind="stable").reset_index(drop=True)
+    tx.insert(0, "txn_id", np.arange(1, n + 1))
+
+    path = Path(path)
+    path.unlink(missing_ok=True)
+    con = duckdb.connect(str(path))
+    for name, df in [("transactions", tx), ("merchants", merchants), ("banks", banks)]:
+        con.execute(f"CREATE TABLE {name} AS SELECT * FROM df")
+    con.execute("""
+        CREATE TABLE settlements AS
+        SELECT merchant_id, CAST(ts AS DATE) AS date,
+               SUM(amount) AS settled_amount, COUNT(*) AS settled_count
+        FROM transactions WHERE status = 'success'
+        GROUP BY 1, 2 ORDER BY 1, 2
+    """)
+    con.close()
+
+
+def ensure(path):
+    """Build the database from the seed if it is missing."""
+    if not Path(path).exists():
+        build(path)
