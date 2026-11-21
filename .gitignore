@@ -9,5 +9,11 @@ __pycache__/
 .streamlit/secrets.toml
 .llm_cache/
 
-# Video sources and renders: too large for the repo
-video/
+# Video voice, recordings and renders: too large for the repo. The scripts that make them are kept.
+video/app/
+video/voice/
+video/rec/
+video/out/
+video/install.log
+video/rec.sh
+video/scout.py
