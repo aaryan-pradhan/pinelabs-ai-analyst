@@ -222,6 +222,8 @@ if question:
         st.stop()
     writer = "Claude Code during development" if replayed else "a free model"
 
+    if not answer.narrated:
+        writer = "the pipeline, as the free model was unavailable"
     doc(BLANK, RULE, BLANK, row(label("Answer"), "" if answer.result else f"headline by {writer}"),
         BLANK, lines(answer.headline), BLANK)
     chips = st.container(horizontal=True, gap="small")

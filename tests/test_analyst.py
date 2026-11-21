@@ -183,16 +183,19 @@ def down(prompt, check):
     raise ModelUnavailable("free model limit reached, try again in a minute")
 
 
-def test_model_down_after_planning_carries_the_planned_sql(db_path):
-    replies = iter([json.dumps(WK6_PLAN)])
+@pytest.mark.parametrize("narration", [None, "Sorry, I can't help with that."])  # down, or unusable
+def test_without_narration_the_answer_keeps_its_computed_headline(db_path, narration):
+    replies = iter([json.dumps(WK6_PLAN), narration])
 
     def llm(prompt, check):
-        return next(replies, None) or down(prompt, check)
+        return next(replies) or down(prompt, check)
 
-    with pytest.raises(ModelUnavailable) as err:
-        ask("Why did success rate drop in week 6?", ANALYST, llm, db_path)
-    assert err.value.sql
-    assert all(s.startswith("SELECT") and "IN (5, 6)" in s for s in err.value.sql)
+    answer = ask("Why did success rate drop in week 6?", ANALYST, llm, db_path)
+    assert answer.narrated is False
+    assert answer.headline.startswith("Success rate fell") and "wk5" in answer.headline
+    assert answer.hypotheses == answer.recommendations == []
+    assert [f.label for f in answer.facts][:2] == ["Success rate wk5", "Success rate wk6"]
+    assert any("model was unavailable" in c for c in answer.dq["caveats"])
 
 
 def test_model_down_before_planning_carries_the_default_plan_sql(db_path):
@@ -216,14 +219,6 @@ def test_plan_for_a_metric_the_analyst_cannot_answer_is_refused(db_path):
 
     with pytest.raises(ModelUnavailable, match="unusable reply"):
         ask("What was GMV by payment method in week 8?", ANALYST, fake_llm(gmv), db_path)
-
-
-def test_narration_that_is_not_json_is_refused_with_the_executed_sql(db_path):
-    replies = iter([json.dumps(WK6_PLAN), "Sorry, I can't help with that."])
-
-    with pytest.raises(ModelUnavailable, match="unusable") as err:
-        ask("Why did success rate drop in week 6?", ANALYST, lambda prompt, check: next(replies), db_path)
-    assert all("IN (5, 6)" in s for s in err.value.sql)
 
 
 def test_filter_that_matches_no_attempts_is_refused_with_its_sql(db_path):

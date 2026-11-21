@@ -48,3 +48,13 @@ def test_page_writes_words_out_in_full(app):
     page = re.sub(r"<pre.*?</pre>", "", html(app.run()), flags=re.S)  # the SQL keeps its own names
     text = re.sub("<.*?>", " ", page)
     assert not re.search(r"\bwk\d|\dpp\b", text)
+
+
+def test_demo_question_with_an_edited_window_still_answers_offline(app):
+    app.run()
+    app.text_input[0].set_value("How's success rate lately?").run()
+    app.session_state.weeks = [5, 6]  # what the Window chip's Re-run stores
+    page = html(app.run())
+    assert not app.exception
+    assert "Model unavailable" not in page and "headline by the pipeline" in page
+    assert "92.66%" in page and "88.66%" in page

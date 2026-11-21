@@ -38,6 +38,7 @@ class Answer:
     dq: dict  # data-quality numbers, caveats and confidence
     assumptions: dict  # defaults chosen for what the question left open, editable by the user
     result: dict = None  # ad-hoc answers only: {"sql", "tables", "rows"}, rows as a DataFrame
+    narrated: bool = True  # False: the model was unavailable, so the headline is the computed one
 
 
 class AskBack(Exception):
@@ -196,15 +197,18 @@ def ask(question, role, llm, db_path=DB_PATH, weeks=None):
     facts += [Fact(f"{s['segment']} Success rate change", s["rate_after"] - s["rate_before"],
                    seg_sql, seg_tables, cited, window, "pp") for s in d["segments"]]
 
+    computed = headline(d, base, current, filters)
+    checks = dq.check(db_path, weeks, [overall_sql, seg_sql], by_week, role.category)
     try:
-        story = reply(llm, narration_prompt(question, headline(d, base, current, filters), facts), narrated)
-    except ModelUnavailable as e:
-        e.sql = [overall_sql] + [sql for _, sql, _, _ in splits]
-        raise
-    return Answer(story["headline"], facts, d,
+        story = reply(llm, narration_prompt(question, computed, facts), narrated)
+    except ModelUnavailable:  # the Facts stand without narration, e.g. an edited window the replay cache lacks
+        story = None
+        checks["caveats"].append("The free model was unavailable, so the headline is computed from the Facts "
+                                 "and there are no Hypotheses or Recommendations.")
+    return Answer(story["headline"] if story else computed, facts, d,
                   [{k: s[k] for k in ("segment", "mix", "rate")} for s in d["segments"]],
-                  story["hypotheses"], story["recommendations"], dq.check(db_path, weeks, [overall_sql, seg_sql], by_week, role.category),
-                  assumptions)
+                  story["hypotheses"] if story else [], story["recommendations"] if story else [], checks,
+                  assumptions, narrated=story is not None)
 
 
 def ad_hoc_answer(sql, role, db_path):
