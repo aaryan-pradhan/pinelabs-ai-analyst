@@ -8,3 +8,21 @@ __pycache__/
 *.stamp
 .streamlit/secrets.toml
 .llm_cache/
+
+# Video voice, recordings and renders: too large for the repo. The scripts that make them are kept.
+video/app/
+video/voice/
+video/rec/
+video/out/
+video/install.log
+video/rec.sh
+video/scout.py
+
+# Manim render cache and outputs; only the scripts are sources
+videos/.cache/
+videos/*/*
+!videos/*/script.md
+videos/__pycache__/
+video/models/
+!videos/fonts/
+!videos/fonts/*

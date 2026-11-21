@@ -12,7 +12,7 @@ Deployed app: https://pinelabs-ai-analyst-nlszjuhrufcg9lmk9b6tjv.streamlit.app/ 
 | Case Number * | 02 |
 | Name of the Institute * | |
 | GitHub repository URL * | Must be public: `https://github.com/aaryan-pradhan/pinelabs-ai-analyst` |
-| Video demo URL (optional) | Public 2-5 min walkthrough of problem, solution and demo. YouTube, Drive or Loom. |
+| Video demo URL (optional) | https://drive.google.com/file/d/1HonMYlfjRZM0AwlddYfpf6bCbrnr0cXk/view (Google Drive, anyone with the link can view; 4:44) |
 | Project summary * | "What did you build, and why?" Length limit not yet seen. |
 
 The form continues below Project summary; the rest is not yet read.

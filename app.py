@@ -207,8 +207,7 @@ if question:
         answer = e  # shown after the banner, since st.stop() drops anything drawn later
     if replayed:
         notice("Replay mode", "The free model is unavailable (no key or rate-limited), so this demo question "
-               "replays a cached model reply. Numbers, SQL and charts still come from running the pipeline; any "
-               "cached headline, Hypotheses and Recommendations were written with Claude Code during development.")
+               "replays a cached model reply. Numbers, SQL and charts still come from running the pipeline.")
     if isinstance(answer, Rejected):
         notice("Rejected", str(answer), garden="storm")
         for sql in answer.sql:
@@ -222,7 +221,7 @@ if question:
         for sql in answer.sql:
             st.code(sql, language="sql")
         st.stop()
-    writer = "Claude Code during development" if replayed else "a free model"
+    writer = "the model"
 
     if not answer.narrated:
         writer = "the pipeline, as the free model was unavailable"

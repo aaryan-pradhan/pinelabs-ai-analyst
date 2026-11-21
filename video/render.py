@@ -1,0 +1,259 @@
+"""Cut rec/ (from record.py) and voice/ into out/first_cut.mp4 with captions.
+
+The voice sets the clock. Each output frame at time g is looked up in the recording through
+a piecewise-linear map that sends each cue's planned time to the moment it really started, so
+an action that ran late is caught up by speeding up the span before it.
+"""
+import json
+import re
+import shutil
+import subprocess
+from pathlib import Path
+
+import numpy as np
+
+import cues
+from record import PRE
+
+HERE = Path(__file__).parent
+REC, OUT = HERE / "rec", HERE / "out"
+FPS, XF = 30, 0.6  # output frame rate; dissolve length, centred on its boundary
+FIXES = {"Coaster bank": "Coastal Bank", "mixed effect": "Mix effect",
+         "makeshift": "mix shift", "Certainons of": "Settlements are", "alaness": "Analyst",
+         "duplicated rules": "duplicate rows", "no answers": "known answers", "buzz": "pass",
+         "becomes equal": "becomes SQL", "no tables": "known tables", "DuctDB": "DuckDB",
+         "end list": "AI analyst", "so team never": "so it can never", "in the first week 6": "in week 6", "exact sequel": "exact SQL",
+         "coastal bank": "Coastal Bank", "2252": "2,252", r"(\d) \.(\d)": r"\1.\2", r"(\d) %": r"\1%"}
+
+
+MANIM = {2: "mix-vs-rate", 9: "how-it-works"}  # chapter -> its animation in videos/<slug>/
+END = 6.0  # seconds of the closing card with the live link, after the last chapter
+
+
+def end_card():
+    """end.html as one still frame: the deployed app's link."""
+    from playwright.sync_api import sync_playwright
+    png = OUT / "end.jpg"  # jpeg like every other frame: a segment is read as one image type
+    with sync_playwright() as pw:
+        b = pw.chromium.launch()
+        page = b.new_page(viewport={"width": 1920, "height": 1080})
+        page.goto((HERE / "end.html").as_uri(), wait_until="networkidle")
+        page.evaluate("document.fonts.ready")
+        page.screenshot(path=str(png), type="jpeg", quality=95)
+        b.close()
+    return png
+
+
+def manim_frames(c):
+    """The chapter's animation as numbered frames at FPS; its clip time is the chapter's own time."""
+    d = OUT / f"manim{c}"
+    d.mkdir()
+    mp4 = HERE.parent / "videos" / MANIM[c] / f"{MANIM[c]}.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-i", str(mp4), "-vf", f"fps={FPS}", "-q:v", "2",
+                    "-start_number", "0", str(d / "%06d.jpg")], check=True)
+    return sorted(d.iterdir())
+
+
+def source(log):
+    """g (seconds into the video) -> frame file, plus the late-cue report."""
+    tl = cues.timeline()
+    segs = {s["name"]: s for s in log["segments"]}
+    shots = {name: np.array([f[0] for f in log[name]]) for name in ("card", "app")}
+    report, maps = [], {}
+    for s in log["segments"]:
+        p = [-PRE] + [a[0] for a in s["acts"]] + [s["dur"] + PRE]
+        a = [-PRE] + [a[1] for a in s["acts"]]
+        a = list(np.maximum.accumulate(a))
+        a.append(max(s["dur"] + PRE, a[-1] + 0.5))
+        maps[s["name"]] = (p, a)
+        for (pt, at, action) in s["acts"]:
+            if abs(at - pt) > 0.1:
+                report.append(f"{s['name']} {action} at {pt:.2f}s ran {at - pt:+.2f}s")
+    anim = {c: manim_frames(c) for c in cues.MANIM}
+    split = log["split"]
+    end, last = end_card(), tl[-1]["start"] + tl[-1]["dur"]
+
+    def at(g):
+        if g >= last:
+            return end
+        ch = next(ch for ch in reversed(tl) if g >= ch["start"]) if g >= 0 else tl[0]
+        local = g - ch["start"]
+        if ch["c"] in cues.MANIM:
+            frames = anim[ch["c"]]
+            return frames[min(round(local * FPS), len(frames) - 1)]
+        if ch["c"] == 0:
+            name, shot, local = ("card", "card", local) if local < split else ("ch0", "app", local - split)
+        else:
+            name, shot = f"ch{ch['c']}", "app"
+        wall = segs[name]["T"] + np.interp(local, *maps[name])
+        i = max(0, int(np.searchsorted(shots[shot], wall, side="right")) - 1)
+        return REC / shot / f"{i:06d}.jpg"
+    return at, report
+
+
+RNN = HERE / "models" / "sh.rnnn"  # curl -L -o models/sh.rnnn https://raw.githubusercontent.com/richardpl/arnndn-models/master/sh.rnnn
+LOUD = "I=-16:TP=-1.5:LRA=11"
+
+
+def voice_chain(c):
+    """Clean one take: declip, cut rumble and room noise, take the mud out, add presence, tame s, even it out."""
+    return (("adeclip," if c == 2 else "") + f"highpass=f=80,arnndn=m={RNN},afftdn=nf=-30,"
+            "equalizer=f=250:t=q:w=1:g=-3,equalizer=f=4500:t=q:w=1.2:g=3,deesser=i=0.3,"
+            "acompressor=threshold=-24dB:ratio=3:attack=5:release=80:makeup=2")
+
+
+def loudness(wav, a, b, chain):
+    """First loudnorm pass: the take's measured loudness, so the second pass is one fixed gain
+    (dynamic loudnorm lifts the room noise between words)."""
+    err = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(wav), "-af",
+                          f"atrim={a:.3f}:{b:.3f},{chain},loudnorm={LOUD}:print_format=json", "-f", "null", "-"],
+                         capture_output=True, text=True, check=True).stderr
+    m = json.loads(err[err.rindex("{"):err.rindex("}") + 1])
+    return (f"measured_I={m['input_i']}:measured_TP={m['input_tp']}:measured_LRA={m['input_lra']}:"
+            f"measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true")
+
+
+def audio(tl):
+    args, chain = [], []
+    for ch in tl:
+        c, (a, b) = ch["c"], ch["trim"]
+        wav = HERE / "voice" / f"ch{c}.wav"
+        args += ["-i", str(wav)]
+        clean = voice_chain(c)
+        f = (f"[{c}:a]atrim={a:.3f}:{b:.3f},asetpts=PTS-STARTPTS,{clean},loudnorm={LOUD}:{loudness(wav, a, b, clean)},"
+             "aresample=48000," + (f"adelay={round(ch['pre'] * 1000)}:all=1," if ch["pre"] else "")
+             + f"apad,atrim=end_sample={round(ch['dur'] * 48000)}[a{c}]")  # sample-exact, so chapters never drift
+        chain.append(f)
+    chain.append("".join(f"[a{ch['c']}]" for ch in tl) + f"concat=n={len(tl)}:v=0:a=1[out]")
+    wav = OUT / "voice.wav"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", *args, "-filter_complex", ";".join(chain), "-map", "[out]", str(wav)],
+                   check=True)
+    return wav
+
+
+def captions(tl):
+    out, n = [], 0
+    stamp = lambda s: f"{int(s // 3600):02d}:{int(s % 3600 // 60):02d}:{int(s % 60):02d},{int(s * 1000 % 1000):03d}"
+    lines = []
+    for ch in tl:
+        if ch["c"] in cues.MANIM:  # an animation already shows its words
+            continue
+        ws = json.loads((HERE / "words" / f"ch{ch['c']}.json").read_text())
+        chunk = []
+        for i, w in enumerate(ws):
+            chunk.append(w)
+            glued = i + 1 < len(ws) and ws[i + 1][0][:1] in ".%,"  # "77" ".8%" is one number
+            if (w[0][-1:] in ".?!" or len(chunk) >= 9) and not glued or i == len(ws) - 1:
+                text = " ".join(x[0] for x in chunk)
+                for k, v in FIXES.items():
+                    text = re.sub(k if "\\" in k else re.escape(k), v, text, flags=re.I)
+                g0 = ch["start"] + ch["pre"] + chunk[0][1] - ch["trim"][0]
+                g1 = ch["start"] + ch["pre"] + chunk[-1][2] - ch["trim"][0]
+                n += 1
+                out.append(f"{n}\n{stamp(g0)} --> {stamp(g1)}\n{text}\n")
+                lines.append((g0, g1, text, [ch["start"] + ch["pre"] + w[1] - ch["trim"][0] for w in chunk]))
+                chunk = []
+    srt = OUT / "first_cut.srt"
+    srt.write_text("\n".join(out))
+    return srt, lines
+
+
+CAPTION = """<!doctype html><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400&display=block" rel="stylesheet">
+<style>html,body{margin:0;width:1920px;height:1080px;background:transparent}
+#c{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);max-width:1500px;text-align:center;
+font:400 27px/1.45 "Source Code Pro",monospace;color:#fdfcf7;background:rgba(29,58,51,.78);padding:6px 18px;
+border-radius:6px}</style><div id="c"></div>"""
+
+
+def caption_track(lines, total):
+    """Burned-in captions: one transparent frame per line, timed by a concat list, laid over the picture."""
+    from playwright.sync_api import sync_playwright
+    d = OUT / "captions"
+    d.mkdir()
+    with sync_playwright() as pw:
+        b = pw.chromium.launch()
+        page = b.new_page(viewport={"width": 1920, "height": 1080})
+        page.set_content(CAPTION, wait_until="networkidle")
+        page.evaluate("document.fonts.ready")
+        page.evaluate("document.getElementById('c').style.display='none'")
+        page.screenshot(path=str(d / "blank.png"), omit_background=True)
+        page.evaluate("document.getElementById('c').style.display=''")
+        # Words come in as they are spoken: the whole line is laid out (so its box never jumps), the words not yet
+        # said are hidden. A fix may change the word count, so the shown share follows the spoken share.
+        show = """([s, m]) => { const c = document.getElementById('c'); c.innerHTML = '';
+            s.split(' ').forEach((w, i) => { const e = document.createElement('span');
+                e.textContent = w + ' '; e.style.visibility = i < m ? '' : 'hidden'; c.appendChild(e); }); }"""
+        for k, (_, _, text, starts) in enumerate(lines):
+            n = len(text.split(" "))
+            for j in range(len(starts)):
+                page.evaluate(show, [text, round(n * (j + 1) / len(starts))])
+                page.screenshot(path=str(d / f"{k:04d}_{j:02d}.png"), omit_background=True)
+        b.close()
+    out, now = [], 0.0
+    for k, (g0, g1, _, starts) in enumerate(lines):
+        nxt = lines[k + 1][0] if k + 1 < len(lines) else total
+        g1 = nxt if nxt - g1 < 0.4 else g1  # bridge short gaps, so captions don't blink
+        if g0 > now:
+            out += [f"file '{d / 'blank.png'}'", f"duration {g0 - now:.3f}"]
+        for j, s in enumerate(starts):
+            e = starts[j + 1] if j + 1 < len(starts) else g1
+            out += [f"file '{d / f'{k:04d}_{j:02d}.png'}'", f"duration {max(e - s, 0.001):.3f}"]
+        now = g1
+    out += [f"file '{d / 'blank.png'}'", f"duration {max(total - now, 0.1):.3f}", f"file '{d / 'blank.png'}'"]
+    lst = d / "list.txt"
+    lst.write_text("\n".join(out) + "\n")
+    return lst
+
+
+def main():
+    shutil.rmtree(OUT, ignore_errors=True)
+    OUT.mkdir()
+    log = json.loads((REC / "log.json").read_text())
+    tl = cues.timeline()
+    at, report = source(log)
+    total = sum(ch["dur"] for ch in tl) + END
+    # Hard joins inside the app recording; dissolves where the picture changes source.
+    edges = [log["split"]] + [tl[c]["start"] for c in sorted(cues.MANIM)] + [tl[c]["start"] + tl[c]["dur"] for c in sorted(cues.MANIM)]
+    edges = sorted(edges)
+    bounds = [0.0] + edges + [total]
+    parts = []
+    for k in range(len(bounds) - 1):
+        a = bounds[k] - (XF / 2 if k else 0)
+        b = bounds[k + 1] + (XF / 2 if k < len(bounds) - 2 else 0)
+        d = OUT / f"s{k}"
+        d.mkdir()
+        for i in range(round((b - a) * FPS)):
+            (d / f"{i:06d}.jpg").symlink_to(at(a + i / FPS).resolve())
+        parts.append((d, b - a))
+    wav, (srt, lines) = audio(tl), captions(tl)
+    caps = caption_track(lines, total)
+    args, chain, acc, last = [], [], 0.0, "0:v"
+    for k, (d, length) in enumerate(parts):
+        args += ["-framerate", str(FPS), "-i", str(d / "%06d.jpg")]
+        if k:
+            acc += parts[k - 1][1] - (XF if k > 1 else 0)
+            chain.append(f"[{last}][{k}:v]xfade=transition=fade:duration={XF}:offset={acc - XF:.3f}[v{k}]")
+            last = f"v{k}"
+    n = len(parts)
+    chain.append(f"[{n + 1}:v]fps={FPS},format=rgba[cap];[{last}][cap]overlay=0:0:eof_action=repeat[vc]")
+    mp4 = OUT / "first_cut.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", *args, "-i", str(wav), "-f", "concat", "-safe", "0", "-i", str(caps),
+                    "-filter_complex", ";".join(chain), "-map", "[vc]", "-map", f"{n}:a",
+                    "-c:v", "libx264", "-crf", "18", "-preset", "medium",
+                    "-pix_fmt", "yuv420p", "-r", str(FPS), "-c:a", "aac", "-b:a", "192k",
+                    "-t", f"{total:.3f}", str(mp4)], check=True)
+    # The cue list in video time, for giving notes against the cut.
+    lines = []
+    for ch in tl:
+        lines.append(f"{ch['start'] // 60:.0f}:{ch['start'] % 60:05.2f}  chapter {ch['c']}")
+        for t, action, args in ch["cues"]:
+            g = ch["start"] + t
+            lines.append(f"  {g // 60:.0f}:{g % 60:05.2f}  {action} {str(args[0] if args else "")[:70]}")
+    (OUT / "cues.txt").write_text("\n".join(lines) + "\n")
+    print(f"{mp4}: {total:.1f}s")
+    print("\n".join(report) or "every cue on time")
+
+
+if __name__ == "__main__":
+    main()
